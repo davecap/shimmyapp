@@ -12,17 +12,7 @@ if 'SERVER_SOFTWARE' in os.environ and os.environ['SERVER_SOFTWARE'].startswith(
     DEBUG = True
     SERVER_NAME = '127.0.0.1'
 else:
-    SERVER_NAME = 'yourapp.com'
+    SERVER_NAME = 'shimmyapp.appspot.com'
 
 DEBUG = DEBUG_MODE
-
-# Shopify Settings
-
-SHOPIFY_SHARED_SECRET = ''
-SHOPIFY_API_KEY = ''
-SHOPIFY_APP_SITE = ''
-
-SHOPIFY_TEST_SITE = ''
-SHOPIFY_TEST_API_KEY = ''
-SHOPIFY_TEST_PASSWORD = ''
 
