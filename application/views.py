@@ -186,10 +186,11 @@ def upload():
     else:
         return render_template('500.html'), 500
 
-@app.route('/preupload/', methods=['GET','POST'])
+@app.route('/preupload', methods=['GET','POST'])
 @shopify_login_required
 def preupload():
     upload_url = blobstore.create_upload_url(url_for('upload'))
+    logging.info('Preupload requested: %s' % upload_url)
     if request.is_xhr:
         return upload_url
     else:
