@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Shimmy App</title>
+  <link href="/css/style.css" rel="stylesheet" type="text/css"  media="all"  />
+  {% block css %}
+  {% endblock %}  
+  
+  {% block js %}
+  {% endblock %}
+</head>
+
+<body>
+  <div id="header">
+   <a href="{{ url_for('index') }}"><h1>Shimmy App</h1></a>
+    
+    <p id="login-link">
+      {% if current_shop %}
+          <span class="note">current shop</span> <a class="shop_name" href="{{ current_shop.url }}">https://{{ current_shop.url }}</a> <span class="note">|</span>
+          <a href="{{ url_for('logout') }}">logout</a>
+      {% endif %}
+    </p>
+  </div>
+
+  <div id="container" class="clearfix">
+    <ul id="tabs">
+        <li><a href="/">Home</a></li>
+    </ul>
+    
+    <!-- Flash error & notice-->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+                {% for message in messages %}
+                    <div id="flashnotices">{{ message }}</div>
+                {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- begin div.main-->
+    <div id="main">
+      {% block content %}
+      {% endblock %}
+    </div>
+    <!-- end div.main -->
+  </div>
+  
+</body>
+</html>

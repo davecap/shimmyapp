@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block css %}
+<link href="/css/jquery.fileupload-ui.css" rel="stylesheet" type="text/css"  media="all"  />
+{% endblock %}
+
+{% block js %}
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.8.12/jquery-ui.min.js"></script>
+<script src="/js/jquery.fileupload.js"></script>
+<script src="/js/jquery.fileupload-ui.js"></script>
+<script src="/js/application.js"></script>
+{% endblock %}
+
+{% block content %}
+<div id="sidebar">
+    <div id="file_upload">
+        <form action="/upload" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file[]" multiple>
+            <input type="hidden" name="product_id" value="{{ product.id }}" />
+            <button type="submit">Upload</button>
+            <div class="file_upload_label">Upload files</div>
+        </form>
+        <table class="files">
+        </table>
+        <div class="file_upload_overall_progress"><div style="display:none;"></div></div>
+    </div>
+</div>
+
+<h3>{{ product.title }}</h3>
+<a href="https://{{ shop.domain }}/admin/products/{{ product.id }}">Go to the Admin for this product</a>
+
+<p class="description">
+    {{ product.description }}
+</p>
+<p class="price">{{ product.price }} {{ shop.currency }}</p>
+<p style="margin-bottom: 0">{{ product.product_type }} <span class="note">type</span></p>
+<p style="margin: 0">{{ product.vendor }} <span class="note">vendor</span></p>
+
+<h3>Images</h3>
+
+<div class="images">
+
+</div>
+
+{% endblock %}
