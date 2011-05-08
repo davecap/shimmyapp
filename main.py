@@ -1,5 +1,8 @@
 import sys, os
 
+from google.appengine.dist import use_library
+use_library('django', '1.2')
+
 package_dir = "libs"
 
 # Allow unzipped packages to be imported

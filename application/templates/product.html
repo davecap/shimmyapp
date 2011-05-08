@@ -9,22 +9,51 @@
 <script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.8.12/jquery-ui.min.js"></script>
 <script src="/js/jquery.fileupload.js"></script>
 <script src="/js/jquery.fileupload-ui.js"></script>
-<script src="/js/application.js"></script>
+<script>
+
+    $(function () {
+        // Initialize jQuery File Upload (Extended User Interface Version):
+        $('#file_upload').fileUploadUI({
+            uploadTable: $('#files'),
+            buildUploadRow: function (files, index, handler) {
+                return $('<tr><td>' + files[index].name + '<\/td>' +
+                        '<td class="file_upload_progress"><div><\/div><\/td>' +
+                        '<td class="file_upload_cancel">' +
+                        '<button class="ui-state-default ui-corner-all" title="Cancel">' +
+                        '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
+                        '<\/button><\/td><\/tr>');
+            },
+            buildDownloadRow: function (file, handler) {
+                return $('<tr><td>' + file.name + '<\/td><\/tr>');
+            },
+            beforeSend: function (event, files, index, xhr, handler, callBack) {
+                $.get('/preupload', function (data) {
+                    handler.url = data;
+                    callBack();
+                });
+            }    
+        });
+    });
+
+</script>
+
 {% endblock %}
 
 {% block content %}
 <div id="sidebar">
-    <div id="file_upload">
-        <form action="/upload" method="POST" enctype="multipart/form-data">
-            <input type="file" name="file[]" multiple>
-            <input type="hidden" name="product_id" value="{{ product.id }}" />
-            <button type="submit">Upload</button>
-            <div class="file_upload_label">Upload files</div>
-        </form>
-        <table class="files">
-        </table>
-        <div class="file_upload_overall_progress"><div style="display:none;"></div></div>
-    </div>
+    <form id="file_upload" action="/upload?product_id={{ product_id }}" method="POST" enctype="multipart/form-data"> 
+        <input type="file" name="file" multiple> 
+        <input type="hidden" name="protocol" value="http">
+        <input type="hidden" name="product_id" value="{{ product.id }}" />
+        <input type="hidden" name="product_handle" value="{{ product.handle }}" />
+        <input type="hidden" name="next" value="/product/{{ product.id }}" />
+        <button type="submit">Upload</button>
+        <div>Upload files</div> 
+    </form> 
+    <table id="files"></table> 
+    
+    <br />
+
 </div>
 
 <h3>{{ product.title }}</h3>
@@ -40,7 +69,9 @@
 <h3>Images</h3>
 
 <div class="images">
-
+    {% for i in product.images %}
+        <img src="{{ i.src }}" width="200" />
+    {% endfor %}
 </div>
 
 {% endblock %}

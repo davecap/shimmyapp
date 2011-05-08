@@ -146,43 +146,57 @@ def get_shopify_token():
 def product(product_id):
     shop = request.shopify_session.Shop.current().to_dict()
     product = request.shopify_session.Product.find(product_id).to_dict()
+    #uploads = Upload.all().filter("shop_url =", request.shopify_session.url).filter("product_id =", product_id)
+    # GET /admin/products/#{id}/images.json
+    # images = request.shopify_session.Image.find(product_id=product_id).to_dict()
+    
     return render_template('product.html', shop=shop, product=product)
-
 
 @app.route('/+upload', methods=['GET', 'POST'])
 @shopify_login_required
 def upload():
-    # if request.method == 'GET':
-    #     # we are expected to return a list of dicts with infos about the already available files:
-    #     file_infos = []
-    #     for file_name in list_files():
-    #         file_url = url_for('download', file_name=file_name)
-    #         file_size = get_file_size(file_name)
-    #         file_infos.append(dict(name=file_name,
-    #                                size=file_size,
-    #                                url=file_url))
-    #     return jsonify(files=file_infos)
-    if request.method == 'POST':
-        # we are expected to save the uploaded file and return some infos about it:
-        data_file = request.files.get('data_file')
-        file_name = data_file.filename
-        header = data_file.headers['Content-Type']
-        blob_key = blobstore.BlobKey(parse_options_header(header)[1]['blob-key'])
-        blob = blobstore.BlobInfo.get(blob_key)
-        file_size = len(blob)
+    if request.method == 'GET':
+        product_id = request.args.get("product_id")
+        # we are expected to return a list of dicts with infos about the already available files:
+        file_infos = []
+        shop_product_uploads = Upload.all().filter("shop_url =", request.shopify_session.url).filter("product_id =", product_id)
+        for u in shop_product_uploads:
+            file_infos.append(dict(name=u.filename,
+                                   size=u.size,
+                                   url=u.download_url))
+        return jsonify(files=file_infos)
+    elif request.method == 'POST':
+        file_header = parse_options_header(request.files['file'].headers['Content-Type'])
+        blob_key = file_header[1]['blob-key']
+        blob_info = blobstore.BlobInfo.get(blob_key)
         download_url = get_serving_url(blob_key)
         thumb_url = get_serving_url(blob_key, size=250)
+        
+        product_handle = request.form['product_handle']
+        product_id = request.form['product_id']
+        #existing_product_images = request.form['product_images']
+        #file_name = product_handle
+        
         # create a new Upload object
         upload = Upload(shop_url=request.shopify_session.url,
                         product_id=request.form['product_id'],
-                        filename = blob.filename,
-                        mime_type = blob.content_type,
-                        blob = blob,
+                        filename = blob_info.filename,
+                        mime_type = blob_info.content_type,
                         download_url = download_url,
-                        thumb_url = thumb_url
+                        thumb_url = thumb_url,
+                        blob_key = blob_key,
+                        size = blob_info.size
                         )
         upload.put()
-        return jsonify(name=file_name, size=file_size, url=download_url, thumbnail=thumb_url)
+        
+        # rename the file
+        
+        # send it to shopify for this product
+        
+        response = redirect(request.form['next'])
+        response.data = ''
+        return response
+        #return jsonify(name=blob_info.filename, size=blob_info.size, url=download_url, thumbnail=thumb_url)
     else:
         return render_template('500.html'), 500
 
@@ -190,8 +204,12 @@ def upload():
 @shopify_login_required
 def preupload():
     upload_url = blobstore.create_upload_url(url_for('upload'))
-    logging.info('Preupload requested: %s' % upload_url)
     if request.is_xhr:
         return upload_url
     else:
         return render_template('500.html'), 500
+
+def allowed_file(filename): 
+    """Check to make sure the file is an image.""" 
+    allowed_extensions = ['jpg', 'jpeg', 'gif', 'png'] 
+    return filename.rsplit('.', 1)[1].lower() in allowed_extensions

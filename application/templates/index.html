@@ -57,7 +57,7 @@
           <div class="wrapper">
         
             {% if product.images[0] %}
-                <img src="{{ product.images[0].small }}" />
+                <img src="{{ product.images[0].src }}" width="100"/>
             {% endif %}
             <!-- <h4><a href="https://{{ shop.domain }}/admin/products/{{ product.id }}">{{ product.title }}</a></h4> -->
             <h4><a href="/product/{{ product.id }}">{{ product.title }}</a></h4>
