@@ -5,8 +5,7 @@ This file is used for both the routing and logic of your
 application.
 """
 
-from flask import url_for, render_template, request, redirect, flash, session, jsonify, make_response
-from werkzeug import parse_options_header
+from flask import url_for, render_template, request, redirect, flash, session, make_response
 from werkzeug.exceptions import BadRequest
 import logging
 import urllib
@@ -59,7 +58,14 @@ def welcome():
         flash('Sorry, we couldn\'t log you in.')
         return redirect(url_for('index'))
     else:
-        # TODO: get the shop info and set in DB if it isn't already
+        dbshop = Shop.all().filter("url =", shopify_session.url)
+        if len(dbshop) == 0:
+            shop = request.shopify_session.Shop.current().to_dict()
+            dbshop = Shop(  name = shop['name'],
+                            domain = shopify_session.url,
+                            password = shopify_session.password
+                        )
+            dbshop.put()
         session['shopify_token'] = (shopify_session.url, shopify_session.password)
         flash('You are now logged in')
         return redirect(url_for('index'))
@@ -143,7 +149,7 @@ def get_shopify_token():
 def product(product_id):
     shop = request.shopify_session.Shop.current().to_dict()
     product = request.shopify_session.Product.find(product_id).to_dict()
-    images = Image.all().filter("shop_url =", shop['domain']).filter("product_id =", product_id)
+    images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
     upload_images = [ i.url() for i in images ]
     return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
@@ -154,7 +160,7 @@ def upload():
         f = request.files['file']
         product_id = int(request.form['product_id'])        
         # create a new Image object
-        image = Image(shop_url = request.shopify_session.url,
+        image = Image(  shop_domain = request.shopify_session.url,
                         product_id = product_id,
                         product_handle = request.form['product_handle'],
                         image = f.stream.read(),
@@ -175,14 +181,14 @@ def upload():
     else:
         return render_template('500.html'), 500
 
-@app.route('/shop/<string:shop_url>/images/<string:product_handle>_<int:key_id>.jpg')
-def image(shop_url, product_handle, key_id):
+@app.route('/shop/<string:shop_domain>/images/<string:product_handle>_<int:key_id>.jpg')
+def image(shop_domain, product_handle, key_id):
     product_handle = str(urllib.unquote(product_handle))
-    shop_url = str(urllib.unquote(shop_url))
+    shop_domain = str(urllib.unquote(shop_domain))
         
     i = Image.get_by_id(key_id)
     
-    if i.shop_url == shop_url and i.product_handle == product_handle:
+    if i.shop_domain == shop_domain and i.product_handle == product_handle:
         # show the blob
         response = make_response(i.image)
         response.headers['Content-Type'] = i.mimetype
