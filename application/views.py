@@ -5,19 +5,18 @@ This file is used for both the routing and logic of your
 application.
 """
 
-from flask import url_for, render_template, request, redirect, flash, session, jsonify
+from flask import url_for, render_template, request, redirect, flash, session, jsonify, make_response
 from werkzeug import parse_options_header
 from werkzeug.exceptions import BadRequest
 import logging
+import urllib
 
 from application import app, shopify
 from flaskext.shopify import shopify_login_required
 
-from google.appengine.ext import blobstore
-from google.appengine.ext.webapp import blobstore_handlers
 from google.appengine.api.images import get_serving_url
 
-from application.models import Upload
+from application.models import Image, Shop
 
 @app.route('/_ah/warmup')
 def warmup():
@@ -140,59 +139,29 @@ def get_shopify_token():
     else:
         return None
 
-
-@app.route('/product/<int:product_id>')
 @shopify_login_required
+@app.route('/product/<int:product_id>')
 def product(product_id):
     shop = request.shopify_session.Shop.current().to_dict()
     product = request.shopify_session.Product.find(product_id).to_dict()
-    #uploads = Upload.all().filter("shop_url =", request.shopify_session.url).filter("product_id =", product_id)
-    # GET /admin/products/#{id}/images.json
-    # images = request.shopify_session.Image.find(product_id=product_id).to_dict()
-    
-    return render_template('product.html', shop=shop, product=product)
+    images = Image.all().filter("shop_url =", shop['domain']).filter("product_id =", product_id)
+    upload_images = [ i.url() for i in images ]
+    return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
-@app.route('/+upload', methods=['GET', 'POST'])
 @shopify_login_required
+@app.route('/upload', methods=['POST'])
 def upload():
-    if request.method == 'GET':
-        product_id = request.args.get("product_id")
-        # we are expected to return a list of dicts with infos about the already available files:
-        file_infos = []
-        shop_product_uploads = Upload.all().filter("shop_url =", request.shopify_session.url).filter("product_id =", product_id)
-        for u in shop_product_uploads:
-            file_infos.append(dict(name=u.filename,
-                                   size=u.size,
-                                   url=u.download_url))
-        return jsonify(files=file_infos)
-    elif request.method == 'POST':
-        file_header = parse_options_header(request.files['file'].headers['Content-Type'])
-        blob_key = file_header[1]['blob-key']
-        blob_info = blobstore.BlobInfo.get(blob_key)
-        download_url = get_serving_url(blob_key)
-        thumb_url = get_serving_url(blob_key, size=250)
-        
-        product_handle = request.form['product_handle']
-        product_id = request.form['product_id']
-        #existing_product_images = request.form['product_images']
-        #file_name = product_handle
-        
-        # create a new Upload object
-        upload = Upload(shop_url=request.shopify_session.url,
-                        product_id=request.form['product_id'],
-                        filename = blob_info.filename,
-                        mime_type = blob_info.content_type,
-                        download_url = download_url,
-                        thumb_url = thumb_url,
-                        blob_key = blob_key,
-                        size = blob_info.size
+    if request.method == 'POST':
+        f = request.files['file']
+        # create a new Image object
+        image = Image(shop_url = request.shopify_session.url,
+                        product_id = int(request.form['product_id']),
+                        product_handle = request.form['product_handle'],
+                        image = f.stream.read(),
+                        mimetype = f.content_type,
+                        filename = f.filename
                         )
-        upload.put()
-        
-        # rename the file
-        
-        # send it to shopify for this product
-        
+        image.put()
         response = redirect(request.form['next'])
         response.data = ''
         return response
@@ -200,14 +169,29 @@ def upload():
     else:
         return render_template('500.html'), 500
 
-@app.route('/preupload', methods=['GET','POST'])
-@shopify_login_required
-def preupload():
-    upload_url = blobstore.create_upload_url(url_for('upload'))
-    if request.is_xhr:
-        return upload_url
+@app.route('/shop/<string:shop_url>/images/<string:product_handle>_<int:key_id>.jpg')
+def image(shop_url, product_handle, key_id):
+    product_handle = str(urllib.unquote(product_handle))
+    shop_url = str(urllib.unquote(shop_url))
+        
+    i = Image.get_by_id(key_id)
+    
+    if i.shop_url == shop_url and i.product_handle == product_handle:
+        # show the blob
+        response = make_response(i.image)
+        response.headers['Content-Type'] = i.mimetype
+        return response
     else:
-        return render_template('500.html'), 500
+        render_template('404.html'), 404
+
+# @app.route('/preupload', methods=['GET','POST'])
+# @shopify_login_required
+# def preupload():
+#     upload_url = blobstore.create_upload_url(url_for('upload'))
+#     if request.is_xhr:
+#         return upload_url
+#     else:
+#         return render_template('500.html'), 500
 
 def allowed_file(filename): 
     """Check to make sure the file is an image.""" 

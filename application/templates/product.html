@@ -26,12 +26,6 @@
             buildDownloadRow: function (file, handler) {
                 return $('<tr><td>' + file.name + '<\/td><\/tr>');
             },
-            beforeSend: function (event, files, index, xhr, handler, callBack) {
-                $.get('/preupload', function (data) {
-                    handler.url = data;
-                    callBack();
-                });
-            }    
         });
     });
 
@@ -41,7 +35,7 @@
 
 {% block content %}
 <div id="sidebar">
-    <form id="file_upload" action="/upload?product_id={{ product_id }}" method="POST" enctype="multipart/form-data"> 
+    <form id="file_upload" action="/upload" method="POST" enctype="multipart/form-data"> 
         <input type="file" name="file" multiple> 
         <input type="hidden" name="protocol" value="http">
         <input type="hidden" name="product_id" value="{{ product.id }}" />
@@ -53,6 +47,11 @@
     <table id="files"></table> 
     
     <br />
+
+    <h2>Uploaded images</h2>
+    {% for u in upload_images %}
+        <img src="{{ u }}" width=100 /><br />
+    {% endfor %}
 
 </div>
 

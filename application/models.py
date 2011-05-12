@@ -17,7 +17,7 @@ class Shop(db.Model):
     name = db.StringProperty(required=True)
     url = db.StringProperty(required=True)
     logo = db.StringProperty()
-    #access_token = db.StringProperty()
+    access_token = db.StringProperty()
 
 # Product
 #   shopify_id, shop, sku, title, created_on, modified_on
@@ -28,16 +28,19 @@ class Shop(db.Model):
 # Image
 #   shopify_id, product, variant, filename, remote_url, order
 
-class Upload(db.Model):
+class Image(db.Model):
     shop_url = db.StringProperty(required=True)
-    product_id = db.StringProperty(required=True)
+    #shop = db.ReferenceProperty(Shop, collection_name='images')
+    product_id = db.IntegerProperty(required=True)
+    product_handle = db.StringProperty(required=True)
     filename = db.StringProperty(required=True)
-    mime_type = db.StringProperty(required=True)
-    blob = db.BlobProperty(default=None),
-    download_url = db.StringProperty(required=True)
-    thumb_url = db.StringProperty(required=False)
+    mimetype = db.StringProperty(required=True)
+    image = db.BlobProperty(default=None)
     created = db.DateTimeProperty(auto_now_add=True)
     updated = db.DateTimeProperty(auto_now=True)
+    
+    def url(self):
+        return '/shop/%s/images/%s_%s.jpg' % (self.shop_url, self.product_handle, self.key().id())
 
 # class User(db.Model):
 #     id = db.StringProperty(required=True)
