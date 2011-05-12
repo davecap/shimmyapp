@@ -10,11 +10,10 @@ from werkzeug import parse_options_header
 from werkzeug.exceptions import BadRequest
 import logging
 import urllib
+import urlparse
 
 from application import app, shopify
 from flaskext.shopify import shopify_login_required
-
-from google.appengine.api.images import get_serving_url
 
 from application.models import Image, Shop
 
@@ -153,19 +152,26 @@ def product(product_id):
 def upload():
     if request.method == 'POST':
         f = request.files['file']
+        product_id = int(request.form['product_id'])        
         # create a new Image object
         image = Image(shop_url = request.shopify_session.url,
-                        product_id = int(request.form['product_id']),
+                        product_id = product_id,
                         product_handle = request.form['product_handle'],
                         image = f.stream.read(),
                         mimetype = f.content_type,
                         filename = f.filename
-                        )
+                    )
         image.put()
+                
+        # update shopify product
+        product = request.shopify_session.Product.find(product_id)
+        product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], image.url()) })
+        if not product.save():
+            logging.error('Error saving product to Shopify!')
+        
         response = redirect(request.form['next'])
         response.data = ''
         return response
-        #return jsonify(name=blob_info.filename, size=blob_info.size, url=download_url, thumbnail=thumb_url)
     else:
         return render_template('500.html'), 500
 
@@ -183,15 +189,6 @@ def image(shop_url, product_handle, key_id):
         return response
     else:
         render_template('404.html'), 404
-
-# @app.route('/preupload', methods=['GET','POST'])
-# @shopify_login_required
-# def preupload():
-#     upload_url = blobstore.create_upload_url(url_for('upload'))
-#     if request.is_xhr:
-#         return upload_url
-#     else:
-#         return render_template('500.html'), 500
 
 def allowed_file(filename): 
     """Check to make sure the file is an image.""" 

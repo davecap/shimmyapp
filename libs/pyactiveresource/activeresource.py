@@ -84,11 +84,12 @@ class Errors(object):
         """
         attribute_keys = self.base.attributes.keys()
         try:
-            messages = util.xml_to_dict(
-                    xml_string)['errors']['error']
+            messages = util.xml_to_dict(xml_string)['errors']['error']
             if not isinstance(messages, list):
                 messages = [messages]
         except util.Error:
+            messages = []
+        except TypeError:
             messages = []
         for message in messages:
             attr_name = message.split()[0]
