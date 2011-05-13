@@ -204,14 +204,16 @@ def upload():
         return render_template('500.html'), 500
 
 
-@app.route('/shop/<string:shop_domain>/images/<string:product_handle>_<int:key_id>.jpg')
-def image(shop_domain, product_handle, key_id):
+#@app.route('/shop/<string:shop_domain>/images/<string:product_handle>_<int:key_id>.jpg')
+#def image(shop_domain, product_handle, key_id):
+@app.route('/i/<string:key>/<string:product_handle>.jpg')
+def image(key, product_handle):
     product_handle = str(urllib.unquote(product_handle))
-    shop_domain = str(urllib.unquote(shop_domain))
-        
-    i = Image.get_by_id(key_id)
+    i = Image.get(db.Key(encoded=key))
+    #shop_domain = str(urllib.unquote(shop_domain))
+    #i = Image.get_by_id(key_id)
     
-    if i.shop_domain == shop_domain and i.product_handle == product_handle:
+    if i:
         # show the blob
         response = make_response(i.image)
         response.headers['Content-Type'] = i.mimetype
@@ -253,9 +255,11 @@ def sync_worker():
         else:
             logging.info('Product image (%s) saved to shopify!' % url)
             image.delete()
-    db.run_in_transaction(txn)
+    #db.run_in_transaction(txn)
+    txn()
     return ''
 
 def url_for_image(i):
-    return 'http://shimmyapp.appspot.com'+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
+    return 'http://shimmyapp.appspot.com'+url_for('image', key=str(i.key()), product_handle=i.product_handle)
+    #return 'http://shimmyapp.appspot.com'+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
     #return 'http://'+app.config['SERVER_NAME']+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
