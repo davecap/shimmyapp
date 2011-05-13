@@ -58,7 +58,7 @@ def welcome():
         flash('Sorry, we couldn\'t log you in.')
         return redirect(url_for('index'))
     else:
-        dbshop = Shop.all().filter("url =", shopify_session.url)
+        dbshop = Shop.all().filter("url =", request.shopify_session.url)
         if len(dbshop) == 0:
             shop = request.shopify_session.Shop.current().to_dict()
             dbshop = Shop(  name = shop['name'],
@@ -145,13 +145,34 @@ def get_shopify_token():
         return None
 
 @shopify_login_required
-@app.route('/product/<int:product_id>')
+@app.route('/product/<int:product_id>', methods=['POST', 'GET'])
 def product(product_id):
-    shop = request.shopify_session.Shop.current().to_dict()
-    product = request.shopify_session.Product.find(product_id).to_dict()
-    images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
-    upload_images = [ i.url() for i in images ]
-    return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
+    if request.method == 'POST':
+        # SYNC 
+        product = request.shopify_session.Product.find(product_id)
+        
+        images = Image.all().filter("shop_domain =", request.shopify_session.url).filter("product_id =", product_id)
+        
+        if images.count() > 0:
+            for i in images:
+                product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], i.url()) })
+            if not product.save():
+                flash('Error saving product to Shopify:' + str(product.errors))
+                logging.error('Error saving product to Shopify!')
+            else:
+                logging.info('Images synced to product!')
+                flash('Images synced to product!')
+        else:
+            flash('No images to sync!')
+            logging.error('No images to sync!')
+        return redirect(url_for('product', product_id=product_id))
+    else:
+        shop = request.shopify_session.Shop.current().to_dict()
+        product = request.shopify_session.Product.find(product_id).to_dict()
+        
+        images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
+        upload_images = [ i.url() for i in images ]
+        return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
 @shopify_login_required
 @app.route('/upload', methods=['POST'])
@@ -168,18 +189,12 @@ def upload():
                         filename = f.filename
                     )
         image.put()
-                
-        # update shopify product
-        product = request.shopify_session.Product.find(product_id)
-        product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], image.url()) })
-        if not product.save():
-            logging.error('Error saving product to Shopify!')
-        
         response = redirect(request.form['next'])
         response.data = ''
         return response
     else:
         return render_template('500.html'), 500
+
 
 @app.route('/shop/<string:shop_domain>/images/<string:product_handle>_<int:key_id>.jpg')
 def image(shop_domain, product_handle, key_id):

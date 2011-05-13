@@ -52,6 +52,14 @@
     {% for u in upload_images %}
         <img src="{{ u }}" width=100 /><br />
     {% endfor %}
+    
+    <br />
+    {% if upload_images %}
+    <form action="/product/{{ product.id }}" method="POST"> 
+        <input type="hidden" name="product_id" value="{{ product.id }}" />
+        <button type="submit">Sync Images</button>
+    </form> 
+    {% endif %}
 
 </div>
 

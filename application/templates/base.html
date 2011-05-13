@@ -12,7 +12,11 @@
 
 <body>
   <div id="header">
-   <a href="{{ url_for('index') }}"><h1>Shimmy App</h1></a>
+   <a href="{{ url_for('index') }}"><h1>Shimmy App
+   {% if request.shopify_session %}
+    ({{ request.shopify_session.url }})
+   {% endif %}
+   </h1></a>
     
     <p id="login-link">
       {% if current_shop %}
