@@ -27,5 +27,3 @@ class Image(db.Model):
     created = db.DateTimeProperty(auto_now_add=True)
     updated = db.DateTimeProperty(auto_now=True)
     
-    def url(self):
-        return '/shop/%s/images/%s_%s.jpg' % (self.shop_domain, self.product_handle, self.key().id())

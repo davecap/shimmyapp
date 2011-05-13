@@ -176,7 +176,7 @@ def product(product_id):
     product = request.shopify_session.Product.find(product_id).to_dict()
     
     images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
-    upload_images = [ i.url() for i in images ]
+    upload_images = [ url_for_image(i) for i in images ]
     return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
 @shopify_login_required
@@ -245,13 +245,17 @@ def sync_worker():
         product = ss.Product.find(product_id)
         image = Image.get(image_key)
         
-        product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], image.url()) })
+        url = url_for_image(image)
+        product.images.append({ "src": url })
         
         if not product.save():
-            logging.error('Error saving product (%d) images (%s) to Shopify!' % (product_id, image.url()))
+            logging.error('Error saving product (%d) images (%s) to Shopify!' % (product_id, url))
         else:
-            logging.info('Product image (%s) saved to shopify!' % image.url())
+            logging.info('Product image (%s) saved to shopify!' % url)
             image.delete()
-    #db.run_in_transaction(txn)
-    txn()
+    db.run_in_transaction(txn)
     return ''
+
+def url_for_image(i):
+    return 'http://shimmyapp.appspot.com'+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
+    #return 'http://'+app.config['SERVER_NAME']+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
