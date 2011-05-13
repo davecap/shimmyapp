@@ -10,7 +10,7 @@ DEBUG_MODE = False
 # Auto-set debug mode based on App Engine dev environ
 if 'SERVER_SOFTWARE' in os.environ and os.environ['SERVER_SOFTWARE'].startswith('Dev'):
     DEBUG = True
-    SERVER_NAME = '127.0.0.1'
+    SERVER_NAME = 'localhost'
 else:
     SERVER_NAME = 'shimmyapp.appspot.com'
 

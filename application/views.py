@@ -4,6 +4,8 @@ Flask Module Docs:  http://flask.pocoo.org/docs/api/#flask.Module
 This file is used for both the routing and logic of your
 application.
 """
+from google.appengine.api import taskqueue
+from google.appengine.ext import db
 
 from flask import url_for, render_template, request, redirect, flash, session, make_response
 from werkzeug.exceptions import BadRequest
@@ -58,9 +60,9 @@ def welcome():
         flash('Sorry, we couldn\'t log you in.')
         return redirect(url_for('index'))
     else:
-        dbshop = Shop.all().filter("url =", request.shopify_session.url)
-        if len(dbshop) == 0:
-            shop = request.shopify_session.Shop.current().to_dict()
+        dbshop = Shop.all().filter("domain =", shopify_session.url)
+        if dbshop.count() == 0:
+            shop = shopify_session.Shop.current().to_dict()
             dbshop = Shop(  name = shop['name'],
                             domain = shopify_session.url,
                             password = shopify_session.password
@@ -147,34 +149,35 @@ def get_shopify_token():
 @shopify_login_required
 @app.route('/product/<int:product_id>', methods=['POST', 'GET'])
 def product(product_id):
-    if request.method == 'POST':
-        # SYNC 
-        product = request.shopify_session.Product.find(product_id)
-        
-        images = Image.all().filter("shop_domain =", request.shopify_session.url).filter("product_id =", product_id)
-        
-        if images.count() > 0:
-            for i in images:
-                product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], i.url()) })
-            if not product.save():
-                flash('Error saving product to Shopify:' + str(product.errors))
-                logging.error('Error saving product to Shopify!')
-            else:
-                logging.info('Images synced to product!')
-                flash('Images synced to product!')
-                for i in images:
-                    i.delete()
-        else:
-            flash('No images to sync!')
-            logging.error('No images to sync!')
-        return redirect(url_for('product', product_id=product_id))
-    else:
-        shop = request.shopify_session.Shop.current().to_dict()
-        product = request.shopify_session.Product.find(product_id).to_dict()
-        
-        images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
-        upload_images = [ i.url() for i in images ]
-        return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
+    #if request.method == 'POST':
+        # # SYNC 
+        # product = request.shopify_session.Product.find(product_id)
+        # 
+        # images = Image.all().filter("shop_domain =", request.shopify_session.url).filter("product_id =", product_id)
+        # 
+        # if images.count() > 0:
+        #     
+        #     for i in images:
+        #         product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], i.url()) })
+        #     if not product.save():
+        #         flash('Error saving product to Shopify:' + str(product.errors.full_messages()))
+        #         logging.error('Error saving product to Shopify!')
+        #     else:
+        #         logging.info('Images synced to product!')
+        #         flash('Images synced to product!')
+        #         for i in images:
+        #             i.delete()
+        # else:
+        #     flash('No images to sync!')
+        #     logging.error('No images to sync!')
+        # return redirect(url_for('product', product_id=product_id))
+    #else:
+    shop = request.shopify_session.Shop.current().to_dict()
+    product = request.shopify_session.Product.find(product_id).to_dict()
+    
+    images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
+    upload_images = [ i.url() for i in images ]
+    return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
 @shopify_login_required
 @app.route('/upload', methods=['POST'])
@@ -191,6 +194,9 @@ def upload():
                         filename = f.filename
                     )
         image.put()
+        
+        taskqueue.add(url='/tasks/sync', params={'shop_domain': request.shopify_session.url, 'product_id': product_id, 'image_key': image.key()})
+        
         response = redirect(request.form['next'])
         response.data = ''
         return response
@@ -217,3 +223,35 @@ def allowed_file(filename):
     """Check to make sure the file is an image.""" 
     allowed_extensions = ['jpg', 'jpeg', 'gif', 'png'] 
     return filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+# TASKS
+
+@app.route('/tasks/sync', methods=['POST'])
+def sync_worker():
+    import shopify_api
+    def txn():
+        # expects: shop_domain, product_id, image_key
+        # TODO: replace with shop object key
+        shop_domain = request.form.get('shop_domain')
+        product_id = int(request.form.get('product_id'))
+        image_key = request.form.get('image_key')
+        
+        if request.shopify_session:
+            ss = request.shopify_session
+        else:
+            dbshop = Shop.all().filter("domain =", shop_domain)[0]
+            token = (dbshop.domain, dbshop.password)
+            ss = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
+        product = ss.Product.find(product_id)
+        image = Image.get(image_key)
+        
+        product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], image.url()) })
+        
+        if not product.save():
+            logging.error('Error saving product (%d) images (%s) to Shopify!' % (product_id, image.url()))
+        else:
+            logging.info('Product image (%s) saved to shopify!' % image.url())
+            image.delete()
+    #db.run_in_transaction(txn)
+    txn()
+    return ''

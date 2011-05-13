@@ -31,6 +31,10 @@ handlers:
   script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
   login: admin
 
+- url: /tasks/.+
+  script: main.py
+  login: admin
+
 - url: /apple-touch-icon\.png
   mime_type: image/png
   static_files: static/apple-touch-icon.png
