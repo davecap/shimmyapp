@@ -162,6 +162,8 @@ def product(product_id):
             else:
                 logging.info('Images synced to product!')
                 flash('Images synced to product!')
+                for i in images:
+                    i.delete()
         else:
             flash('No images to sync!')
             logging.error('No images to sync!')
