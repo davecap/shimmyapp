@@ -10,6 +10,7 @@ import urllib2
 import urlparse
 from pyactiveresource import formats
 
+from google.appengine.api import urlfetch
 
 class Error(Exception):
     """A general error derived from Exception."""
@@ -146,17 +147,29 @@ class Response(object):
     def get(self, key, value=None):
         return self.headers.get(key, value)
 
+    # @classmethod
+    # def from_httpresponse(cls, response):
+    #     """Create a Response object based on an httplib.HTTPResponse object.
+    # 
+    #     Args:
+    #         response: An httplib.HTTPResponse object.
+    #     Returns:
+    #         A Response object.
+    #     """
+    #     return cls(response.code, response.read(),
+    #                dict(response.headers), response.msg, response)
+    
     @classmethod
     def from_httpresponse(cls, response):
-        """Create a Response object based on an httplib.HTTPResponse object.
-
+        """Create a Response object based on the urlfetch Response object
+    
         Args:
-            response: An httplib.HTTPResponse object.
+            response: An urlfetch Response object
         Returns:
             A Response object.
         """
-        return cls(response.code, response.read(),
-                   dict(response.headers), response.msg, response)
+        return cls(response.status_code, response.content,
+                   dict(response.headers), response.status_code, response)
 
 
 class Connection(object):
@@ -280,7 +293,9 @@ class Connection(object):
             urllib2.HTTPError on server errors.
             urllib2.URLError on IO errors.
         """
-        return urllib2.urlopen(request)
+        #return urllib2.urlopen(request)
+        #fetch(url, payload=None, method=GET, headers={}, allow_truncated=False, follow_redirects=True, deadline=None, validate_certificate=None)
+        return urlfetch.fetch(request.get_full_url(), request.get_data(), request.get_method(), request.headers, deadline=10)
 
     def get(self, path, headers=None):
         """Perform an HTTP get request.
@@ -359,6 +374,10 @@ class Connection(object):
             ServerError: if HTTP error code falls in 500 - 599.
             ConnectionError: if unknown HTTP error code returned.
         """
+        # for compatibility with urlfetch response
+        if err.status_code:
+            err.code = err.status_code
+        
         if err.code in (301, 302):
             raise Redirection(err)
         elif 200 <= err.code < 400:

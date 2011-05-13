@@ -244,11 +244,11 @@ def sync_worker():
             dbshop = Shop.all().filter("domain =", shop_domain)[0]
             token = (dbshop.domain, dbshop.password)
             ss = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
-        product = ss.Product.find(product_id)
-        image = Image.get(image_key)
         
-        url = url_for_image(image)
-        product.images.append({ "src": url })
+        product = ss.Product.find(product_id) # get the Product fresh from Shopify
+        image = Image.get(image_key) # get the Image object from the DB
+        url = url_for_image(image) # get the URL for the Image data (image view)
+        product.images.append({ "src": url }) # add the new image to the images attribute
         
         if not product.save():
             logging.error('Error saving product (%d) images (%s) to Shopify!' % (product_id, url))
