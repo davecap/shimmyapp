@@ -32,7 +32,7 @@ def index():
     else:
         # app code starts here
         shop = request.shopify_session.Shop.current().to_dict()
-        products = [ p.to_dict() for p in request.shopify_session.Product.find(limit=10) ]
+        products = [ p.to_dict() for p in request.shopify_session.Product.find(limit=250) ]
         return render_template('index.html', shop=shop, products=products)
 
 @app.route('/welcome')
@@ -148,32 +148,8 @@ def get_shopify_token():
 @shopify_login_required
 @app.route('/product/<int:product_id>', methods=['POST', 'GET'])
 def product(product_id):
-    #if request.method == 'POST':
-        # # SYNC 
-        # product = request.shopify_session.Product.find(product_id)
-        # 
-        # images = Image.all().filter("shop_domain =", request.shopify_session.url).filter("product_id =", product_id)
-        # 
-        # if images.count() > 0:
-        #     
-        #     for i in images:
-        #         product.images.append({ "src": urlparse.urljoin('http://'+app.config['SERVER_NAME'], i.url()) })
-        #     if not product.save():
-        #         flash('Error saving product to Shopify:' + str(product.errors.full_messages()))
-        #         logging.error('Error saving product to Shopify!')
-        #     else:
-        #         logging.info('Images synced to product!')
-        #         flash('Images synced to product!')
-        #         for i in images:
-        #             i.delete()
-        # else:
-        #     flash('No images to sync!')
-        #     logging.error('No images to sync!')
-        # return redirect(url_for('product', product_id=product_id))
-    #else:
     shop = request.shopify_session.Shop.current().to_dict()
     product = request.shopify_session.Product.find(product_id).to_dict()
-    
     images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
     upload_images = [ url_for_image(i) for i in images ]
     return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
