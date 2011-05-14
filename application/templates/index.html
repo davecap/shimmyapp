@@ -1,30 +1,178 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>Products</h2>
+{% block js %}
 
-    {% if not products %}
-      <em class="note">There are no products in your store.</em>
-    {% else %}
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.8.12/jquery-ui.min.js"></script>
+<script src="/js/jquery.fileupload.js"></script>
+<script src="/js/jquery.fileupload-ui.js"></script>
+<script src="/js/jquery.isotope.min.js"></script>
+<script src='/_ah/channel/jsapi'></script>
 
-      {% for product in products %}
-        <div class="product box">
-          <div class="wrapper">
+<script type='text/javascript'>    
+    $(function () {
+        $list = $('#product-list');
+        vendor_filter = false;
+        type_filter = false;
         
-            {% if product.images[0] %}
-                <img src="{{ product.images[0].src }}" width="100"/>
-            {% endif %}
-            <!-- <h4><a href="https://{{ shop.domain }}/admin/products/{{ product.id }}">{{ product.title }}</a></h4> -->
-            <h4><a href="/product/{{ product.id }}">{{ product.title }}</a></h4>
+        $('#filter-vendor a').click(function(){
+            var filterName = $(this).attr('data-filter');
+            vendor_filter = filterName;
+            if (type_filter && type_filter != '*') {
+                filterName = filterName+type_filter;
+            }
+            $list.isotope({ filter: filterName });
+            return false;
+        });
+        
+        $('#filter-product-type a').click(function(){
+            var filterName = $(this).attr('data-filter');
+            type_filter = filterName;
+            if (vendor_filter && vendor_filter != '*') {
+                filterName = filterName+vendor_filter;
+            }
+            $list.isotope({ filter: filterName });
+            return false;
+        });
+        
+        // switches selected class on buttons
+        $('#options').find('.option-set a').click(function(){
+            var $this = $(this);
+            // don't proceed if already selected
+            if ( !$this.hasClass('selected') ) {
+                $this.parents('.option-set').find('.selected').removeClass('selected');
+                $this.addClass('selected');
+            }
+        });
+        
+        $list.isotope({
+            layoutMode : 'fitRows',
+            itemSelector : '.product',
+        });
+        
+        // Initialize jQuery File Upload (Extended User Interface Version):
+        $('.file_upload').fileUploadUI({
+            // uploadTable: $('#file-queue'),
+            // buildUploadRow: function (files, index, handler) {
+            //     return $('<tr><td>' + files[index].name + '<\/td>' +
+            //             '<td class="file_upload_progress"><div><\/div><\/td>' +
+            //             '<td class="file_upload_cancel">' +
+            //             '<button class="ui-state-default ui-corner-all" title="Cancel">' +
+            //             '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
+            //             '<\/button><\/td><\/tr>');
+            // },
+            // buildDownloadRow: function (file, handler) {
+            //     return $('<tr><td>' + file.name + '<\/td><\/tr>');
+            // },
+        });
+    });
 
-            <p class="price">{{ product.price }} {{ shop.currency }}</p>
-            <p style="margin-bottom: 0">{{ product.product_type }} <span class="note">type</span></p>
-            <p style="margin: 0">{{ product.vendor }} <span class="note">vendor</span></p>
-      
-            <div style="clear:left"></div>
-          </div>
+</script>
+
+
+{% endblock %}
+
+{% block content %}
+
+<script type='text/javascript'>
+
+    
+    // App Engine Channel API
+    
+    // onOpened = function() {
+    //     connected = true;
+    //     sendMessage('opened');
+    //     alert('open');
+    // };
+    
+    onMessage = function(m) {
+        alert(m.message);
+    };
+    
+    // sendMessage = function(path, opt_param) {
+    //     path += '?g=' + state.game_key;
+    //     if (opt_param) {
+    //         path += '&' + opt_param;
+    //     }
+    //     var xhr = new XMLHttpRequest();
+    //     xhr.open('POST', path, true);
+    //     xhr.send();
+    // };
+
+    openChannel = function() {
+      var token = '{{ request.channel_token }}';
+      var channel = new goog.appengine.Channel(token);
+      var handler = {
+        'onmessage': onMessage,
+        'onopen': function() {},
+        'onerror': function() {},
+        'onclose': function() {}
+      };
+      var socket = channel.open(handler);
+      socket.onmessage = onMessage;
+    };
+
+    initialize = function() {
+      openChannel();
+    };
+
+    setTimeout(initialize, 100);
+
+</script>
+
+
+{% if not products %}
+    <em class="note">There are no products in your store.</em>
+{% else %}
+
+    <div id="options" class="clearfix">
+        <div class="option-combo">
+            <ul id="filter-vendor" class="option-set floated clearfix">
+                <li><a href="#vendor-all" data-filter="*" class="selected">All Vendors</a></li>
+                {% for v in vendors %}
+                    <li><a href="#{{ v.slug }}" data-filter=".vendor-{{ v.slug }}">{{ v.name }}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="option-combo">
+            <ul id="filter-product-type" class="option-set floated clearfix">
+                <li><a href="#product-type-all" data-filter="*" class="selected">All Types</a></li>
+                {% for t in product_types %}
+                    <li><a href="#{{ t.slug }}" data-filter=".product-type-{{ t.slug }}">{{ t.name }}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+
+    <div id="product-list" class="fitRows clearfix">
+      {% for product in products %}
+        <div class="product box vendor-{{ product.vendor_slug }} product-type-{{ product.product_type_slug }}" style="width:90%;">
+            <form class="file_upload" action="/upload" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="protocol" value="http">
+                <input type="hidden" name="product_id" value="{{ product.id }}" />
+                <input type="hidden" name="product_handle" value="{{ product.handle }}" />                    
+                <div class="wrapper clearfix">
+                    <div style="float:left;margin-right:50px;">
+                        <h4><a href="https://{{ shop.domain }}/admin/products/{{ product.id }}">{{ product.title }}</a></h4>
+                        <p style="margin-bottom: 0">{{ product.product_type }} <span class="note">type</span></p>
+                        <p style="margin: 0">{{ product.vendor }} <span class="note">vendor</span></p>
+                    </div>
+                    <div class="images">
+                        {% for i in product.images %}
+                            <img src="{{ i.src }}" width="50"/>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div style="clear:left"></div>
+                <div class="upload_buttons" style="display:none;">
+                    <button type="submit">Upload</button>
+                    <input type="file" name="file" multiple>
+                </div>
+            </form>
         </div>
       {% endfor %}
+     </div>
 
-    {% endif %}
+{% endif %}
 {% endblock %}

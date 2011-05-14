@@ -4,21 +4,44 @@ Flask Module Docs:  http://flask.pocoo.org/docs/api/#flask.Module
 This file is used for both the routing and logic of your
 application.
 """
-from google.appengine.api import taskqueue
+from google.appengine.api import taskqueue, channel
+from django.utils import simplejson
+from django.template.defaultfilters import slugify
 
-from flask import url_for, render_template, request, redirect, flash, session, make_response
+from flask import url_for, render_template, request, redirect, flash, session, make_response, _request_ctx_stack
 from werkzeug.exceptions import BadRequest
 import logging
 import os
 
-from application import app, shopify
 from flaskext.shopify import shopify_login_required
 
-from application.models import Image, Shop
+from application import app, shopify, models
+
+def get_or_create_shop(shopify_session):        
+    shop = models.Shop.all().filter("domain =", shopify_session.url)
+    if shop.count() == 0:
+        logging.error('No Shop found in DB but shopify_session exists, creating shop')
+        shop = models.Shop(domain=shopify_session.url, password=shopify_session.password)
+        shop.put()
+    else:
+        shop = shop[0]
+    shop.shopify_session = shopify_session
+    return shop
 
 @app.route('/_ah/warmup')
 def warmup():
     return ''
+
+@app.before_request
+def before_request():
+    """ Get the shop data before each request, if possible """
+    ctx = _request_ctx_stack.top
+
+@app.after_request
+def add_header(response):
+    """Add header to force latest IE rendering engine and Chrome Frame."""
+    response.headers['X-UA-Compatible'] = 'IE=Edge,chrome=1'
+    return response
 
 @app.route('/')
 def index():
@@ -31,9 +54,27 @@ def index():
         return render_template('install.html')
     else:
         # app code starts here
-        shop = request.shopify_session.Shop.current().to_dict()
+        shop = get_or_create_shop(request.shopify_session)
+        # TODO: get more than 250 products
+        channel_token = channel.create_channel(request.shopify_session.url)
         products = [ p.to_dict() for p in request.shopify_session.Product.find(limit=250) ]
-        return render_template('index.html', shop=shop, products=products)
+        vendors = []
+        product_types = []
+        for p in products:
+            p['vendor_slug'] = slugify(p['vendor'])
+            p['product_type_slug'] = slugify(p['product_type'])
+            vendors.append(p['vendor'])
+            product_types.append(p['product_type'])
+        vendors = [ { 'slug': slugify(v), 'name': v } for v in set(vendors) ]
+        product_types = [ { 'slug': slugify(t), 'name': t } for t in set(product_types) ]
+        
+        template_values = { 'shop': shop,
+                            'vendors': vendors,
+                            'product_types': product_types,
+                            'products': products,
+                            'channel_token': channel_token
+                            }
+        return render_template('index.html', **template_values)
 
 @app.route('/welcome')
 def welcome():
@@ -58,14 +99,6 @@ def welcome():
         flash('Sorry, we couldn\'t log you in.')
         return redirect(url_for('index'))
     else:
-        dbshop = Shop.all().filter("domain =", shopify_session.url)
-        if dbshop.count() == 0:
-            shop = shopify_session.Shop.current().to_dict()
-            dbshop = Shop(  name = shop['name'],
-                            domain = shopify_session.url,
-                            password = shopify_session.password
-                        )
-            dbshop.put()
         session['shopify_token'] = (shopify_session.url, shopify_session.password)
         flash('You are now logged in')
         return redirect(url_for('index'))
@@ -115,13 +148,6 @@ def uninstall():
 #         }
 #     res = s.WebHook('/admin/webhooks.json', d)
 
-@app.after_request
-def add_header(response):
-    """Add header to force latest IE rendering engine and Chrome Frame."""
-    if request.method == 'GET':
-        response.headers['X-UA-Compatible'] = 'IE=Edge,chrome=1'
-    return response
-
 ## Error handlers
 # Handle 404 errors
 @app.errorhandler(404)
@@ -145,23 +171,23 @@ def get_shopify_token():
     else:
         return None
 
-@shopify_login_required
-@app.route('/product/<int:product_id>', methods=['POST', 'GET'])
-def product(product_id):
-    shop = request.shopify_session.Shop.current().to_dict()
-    product = request.shopify_session.Product.find(product_id).to_dict()
-    images = Image.all().filter("shop_domain =", shop['domain']).filter("product_id =", product_id)
-    upload_images = [ url_for_image(i) for i in images ]
-    return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
+# @shopify_login_required
+# @app.route('/product/<int:product_id>', methods=['POST', 'GET'])
+# def product(product_id):
+#     shop = request.shop
+#     product = request.shopify_session.Product.find(product_id).to_dict()
+#     images = models.Image.all().filter("shop_domain =", shop.domain).filter("product_id =", product_id)
+#     upload_images = [ url_for_image(i) for i in images ]
+#     return render_template('product.html', shop=shop, product=product, upload_images=upload_images)
 
 @shopify_login_required
 @app.route('/upload', methods=['POST'])
 def upload():
     if request.method == 'POST':
         f = request.files['file']
-        product_id = int(request.form['product_id'])        
+        product_id = int(request.form['product_id'])
         # create a new Image object
-        image = Image(  shop_domain = request.shopify_session.url,
+        image = models.Image(  shop = get_or_create_shop(request.shopify_session),
                         product_id = product_id,
                         product_handle = request.form['product_handle'],
                         image = f.stream.read(),
@@ -170,19 +196,21 @@ def upload():
                         extension = os.path.splitext(f.filename)[1]
                     )
         image.put()
-        
         taskqueue.add(url='/tasks/sync', params={'shop_domain': request.shopify_session.url, 'product_id': product_id, 'image_key': image.key()})
-        
-        response = redirect(request.form['next'])
-        response.data = ''
-        return response
+        return ''
     else:
         return render_template('500.html'), 500
 
 @app.route('/i/<int:key_id>/<string:filename>')
 def image(key_id, filename):
-    # IMPLEMENTED IN WEBAPP TO OVERRIDE HEAD REQUESTS
-    pass
+    # NOTE: may be IMPLEMENTED IN WEBAPP TO OVERRIDE HEAD REQUESTS
+    i = models.Image.get_by_id(key_id)
+    if i:
+        response = make_response(i.image)
+        response.headers['Content-Type'] = i.mimetype
+        return response
+    else:
+        render_template('404.html'), 404
 
 def url_for_image(i):
     filename = i.product_handle + '-%d%s' % (i.key().id(), i.extension)
@@ -206,20 +234,22 @@ def sync_worker():
         image_key = request.form.get('image_key')
         
         if request.shopify_session:
-            ss = request.shopify_session
+            shopify_session = request.shopify_session
         else:
-            dbshop = Shop.all().filter("domain =", shop_domain)[0]
+            dbshop = models.Shop.all().filter("domain =", shop_domain)[0]
             token = (dbshop.domain, dbshop.password)
-            ss = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
+            shopify_session = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
         
-        product = ss.Product.find(product_id) # get the Product fresh from Shopify
-        image = Image.get(image_key) # get the Image object from the DB
+        product = shopify_session.Product.find(product_id) # get the Product fresh from Shopify
+        image = models.Image.get(image_key) # get the Image object from the DB
         url = url_for_image(image) # get the URL for the Image data (image view)
         product.images.append({ "src": url }) # add the new image to the images attribute
         
         if not product.save():
+            channel.send_message(shopify_session.url, simplejson.dumps({ 'message': 'Error saving product to shopify!', 'product_id': product_id }))
             logging.error('Error saving product (%d) images (%s) to Shopify! \n%s' % (product_id, url, str(product.errors.full_messages())))
         else:
+            channel.send_message(shopify_session.url, simplejson.dumps({ 'message': 'Product saved to shopify!', 'product_id': product_id }))
             logging.info('Product image (%s) saved to shopify!' % url)
             image.delete()
     #db.run_in_transaction(txn)

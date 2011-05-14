@@ -12,15 +12,11 @@
 
 <body>
   <div id="header">
-   <a href="{{ url_for('index') }}"><h1>Shimmy App
-   {% if request.shopify_session %}
-    ({{ request.shopify_session.url }})
-   {% endif %}
-   </h1></a>
+   <a href="{{ url_for('index') }}"><h1>Shimmy App</h1></a>
     
     <p id="login-link">
-      {% if current_shop %}
-          <span class="note">current shop</span> <a class="shop_name" href="{{ current_shop.url }}">https://{{ current_shop.url }}</a> <span class="note">|</span>
+      {% if shop %}
+          <span class="note">current shop</span> <a class="shop_name" href="https://{{ shop.domain }}">https://{{ shop.domain }}</a> <span class="note">|</span>
           <a href="{{ url_for('logout') }}">logout</a>
       {% endif %}
     </p>

@@ -1,3 +1,4 @@
 secret_keys.py
 *.pyc
 shopify.py
+.DS_Store
