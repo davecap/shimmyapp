@@ -1,6 +1,5 @@
 import os
 import sys
-import logging
 
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
@@ -20,7 +19,6 @@ class ImageHandler(webapp.RequestHandler):
         self.get(key_id, filename)
 
     def get(self, key_id, filename):
-        logging.error("GET %s   %s" % (key_id, filename))
         i = Image.get_by_id(int(key_id))
         if not i:
             self.error(404)
