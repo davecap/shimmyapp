@@ -14,7 +14,6 @@ from types import CodeType
 from werkzeug.utils import escape
 from werkzeug.local import Local
 from werkzeug.debug.repr import debug_repr, dump, helper
-from werkzeug.debug.utils import render_template
 
 
 _local = Local()
@@ -170,7 +169,7 @@ class _InteractiveConsole(code.InteractiveInterpreter):
     def runcode(self, code):
         try:
             exec code in self.globals, self.locals
-        except:
+        except Exception:
             self.showtraceback()
 
     def showtraceback(self):

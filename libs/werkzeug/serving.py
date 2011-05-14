@@ -20,7 +20,7 @@
         #!/usr/bin/env python
         # -*- coding: utf-8 -*-
         from myproject import make_app
-        from werkzeug import run_simple
+        from werkzeug.serving import run_simple
 
         app = make_app(...)
         run_simple('localhost', 8080, app, use_reloader=True)
@@ -42,7 +42,6 @@ import time
 import thread
 import subprocess
 from urllib import unquote
-from itertools import chain
 from SocketServer import ThreadingMixIn, ForkingMixIn
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
@@ -153,7 +152,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler, object):
             execute(app)
         except (socket.error, socket.timeout), e:
             self.connection_dropped(e, environ)
-        except:
+        except Exception:
             if self.server.passthrough_errors:
                 raise
             from werkzeug.debug.tbtools import get_current_traceback
@@ -164,7 +163,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler, object):
                 if not headers_sent:
                     del headers_set[:]
                 execute(InternalServerError())
-            except:
+            except Exception:
                 pass
             self.server.log('error', 'Error on request:\n%s',
                             traceback.plaintext)
@@ -175,7 +174,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler, object):
             return BaseHTTPRequestHandler.handle(self)
         except (socket.error, socket.timeout), e:
             self.connection_dropped(e)
-        except:
+        except Exception:
             if self.server.ssl_context is None or not is_ssl_error():
                 raise
 
@@ -279,14 +278,18 @@ class _SSLConnectionFix(object):
 
 def select_ip_version(host, port):
     """Returns AF_INET4 or AF_INET6 depending on where to connect to."""
-    try:
-        info = socket.getaddrinfo(host, port, socket.AF_UNSPEC,
-                                  socket.SOCK_STREAM, 0,
-                                  socket.AI_PASSIVE)
-        if info:
-            return info[0][0]
-    except socket.gaierror:
-        pass
+    # disabled due to problems with current ipv6 implementations
+    # and various operating systems.  Probably this code also is
+    # not supposed to work, but I can't come up with any other
+    # ways to implement this.
+    ##try:
+    ##    info = socket.getaddrinfo(host, port, socket.AF_UNSPEC,
+    ##                              socket.SOCK_STREAM, 0,
+    ##                              socket.AI_PASSIVE)
+    ##    if info:
+    ##        return info[0][0]
+    ##except socket.gaierror:
+    ##    pass
     if ':' in host and hasattr(socket, 'AF_INET6'):
         return socket.AF_INET6
     return socket.AF_INET
@@ -296,6 +299,7 @@ class BaseWSGIServer(HTTPServer, object):
     """Simple single-threaded, single-process WSGI server."""
     multithread = False
     multiprocess = False
+    request_queue_size = 128
 
     def __init__(self, host, port, app, handler=None,
                  passthrough_errors=False, ssl_context=None):
@@ -401,9 +405,16 @@ def reloader_loop(extra_files=None, interval=1):
                         filename = filename[:-1]
                     yield filename
 
+    fnames = []
+    fnames.extend(iter_module_files())
+    fnames.extend(extra_files or ())
+
+    reloader(fnames, interval=interval)
+
+def _reloader_stat_loop(fnames, interval=1):
     mtimes = {}
     while 1:
-        for filename in chain(iter_module_files(), extra_files or ()):
+        for filename in fnames:
             try:
                 mtime = os.stat(filename).st_mtime
             except OSError:
@@ -418,13 +429,54 @@ def reloader_loop(extra_files=None, interval=1):
                 sys.exit(3)
         time.sleep(interval)
 
+def _reloader_inotify(fnames, interval=None):
+    #: Mutated by inotify loop when changes occur.
+    changed = [False]
+
+    # Setup inotify watches
+    from pyinotify import WatchManager, EventsCodes, Notifier
+    wm = WatchManager()
+    mask = "IN_DELETE_SELF IN_MOVE_SELF IN_MODIFY IN_ATTRIB".split()
+    mask = reduce(lambda m, a: m | getattr(EventsCodes, a), mask, 0)
+
+    def signal_changed(event):
+        if changed[0]:
+            return
+        _log('info', ' * Detected change in %r, reloading' % event.path)
+        changed[:] = [True]
+
+    for fname in fnames:
+        wm.add_watch(fname, mask, signal_changed)
+
+    # ... And now we wait...
+    notif = Notifier(wm)
+    try:
+        while not changed[0]:
+            notif.process_events()
+            if notif.check_events(timeout=interval):
+                notif.read_events()
+            # TODO Set timeout to something small and check parent liveliness
+    finally:
+        notif.stop()
+    sys.exit(3)
+
+# Decide which reloader to use
+try:
+    __import__("pyinotify")   # Pyflakes-avoidant
+except ImportError:
+    reloader = _reloader_stat_loop
+    reloader_name = "stat() polling"
+else:
+    reloader = _reloader_inotify
+    reloader_name = "inotify events"
+
 
 def restart_with_reloader():
     """Spawn a new Python interpreter with the same arguments as this one,
     but running the reloader thread.
     """
     while 1:
-        _log('info', ' * Restarting with reloader...')
+        _log('info', ' * Restarting with reloader: %s', reloader_name)
         args = [sys.executable] + sys.argv
         new_environ = os.environ.copy()
         new_environ['WERKZEUG_RUN_MAIN'] = 'true'

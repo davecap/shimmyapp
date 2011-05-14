@@ -12,12 +12,13 @@
 """
 import re
 import os
+import sys
 from time import time
 from datetime import datetime, timedelta
 
 from werkzeug._internal import _decode_unicode, \
      _iter_modules, _ExtendedCookie, _ExtendedMorsel, \
-     _DictAccessorProperty, _dump_date, _parse_signature, _missing
+     _DictAccessorProperty, _parse_signature, _missing
 
 
 _format_re = re.compile(r'\$(?:(%s)|\{(%s)\})' % (('[a-zA-Z_][a-zA-Z0-9_]*',) * 2))
@@ -146,8 +147,9 @@ class HTMLBuilder(object):
     _entities = name2codepoint.copy()
     _entities['apos'] = 39
     _empty_elements = set([
-        'area', 'base', 'basefont', 'br', 'col', 'frame', 'hr', 'img',
-        'input', 'isindex', 'link', 'meta', 'param'
+        'area', 'base', 'basefont', 'br', 'col', 'command', 'embed', 'frame',
+        'hr', 'img', 'input', 'keygen', 'isindex', 'link', 'meta', 'param',
+        'source', 'wbr'
     ])
     _boolean_attributes = set([
         'selected', 'checked', 'compact', 'declare', 'defer', 'disabled',
@@ -167,34 +169,41 @@ class HTMLBuilder(object):
         if tag[:2] == '__':
             raise AttributeError(tag)
         def proxy(*children, **arguments):
-            buffer = ['<' + tag]
-            write = buffer.append
+            buffer = '<' + tag
             for key, value in arguments.iteritems():
                 if value is None:
                     continue
-                if key.endswith('_'):
+                if key[-1] == '_':
                     key = key[:-1]
                 if key in self._boolean_attributes:
                     if not value:
                         continue
-                    value = self._dialect == 'xhtml' and '="%s"' % key or ''
+                    if self._dialect == 'xhtml':
+                        value = '="' + key + '"'
+                    else:
+                        value = ''
                 else:
-                    value = '="%s"' % escape(value, True)
-                write(' ' + key + value)
+                    value = '="' + escape(value, True) + '"'
+                buffer += ' ' + key + value
             if not children and tag in self._empty_elements:
-                write(self._dialect == 'xhtml' and ' />' or '>')
-                return ''.join(buffer)
-            write('>')
-            children_as_string = ''.join(unicode(x) for x in children
-                                         if x is not None)
+                if self._dialect == 'xhtml':
+                    buffer += ' />'
+                else:
+                    buffer += '>'
+                return buffer
+            buffer += '>'
+            
+            children_as_string = ''.join([unicode(x) for x in children
+                                         if x is not None])
+            
             if children_as_string:
                 if tag in self._plaintext_elements:
                     children_as_string = escape(children_as_string)
                 elif tag in self._c_like_cdata and self._dialect == 'xhtml':
-                    children_as_string = '/*<![CDATA[*/%s/*]]>*/' % \
-                                         children_as_string
-            buffer.extend((children_as_string, '</%s>' % tag))
-            return ''.join(buffer)
+                    children_as_string = '/*<![CDATA[*/' + \
+                                         children_as_string + '/*]]>*/'
+            buffer += children_as_string + '</' + tag + '>'
+            return buffer
         return proxy
 
     def __repr__(self):
@@ -332,21 +341,6 @@ def unescape(s):
     return _entity_re.sub(handle_match, s)
 
 
-def cookie_date(expires=None):
-    """Formats the time to ensure compatibility with Netscape's cookie
-    standard.
-
-    Accepts a floating point number expressed in seconds since the epoch in, a
-    datetime object or a timetuple.  All times in UTC.  The :func:`parse_date`
-    function can be used to parse such a date.
-
-    Outputs a string in the format ``Wdy, DD-Mon-YYYY HH:MM:SS GMT``.
-
-    :param expires: If provided that date is used, otherwise the current.
-    """
-    return _dump_date(expires, '-')
-
-
 def parse_cookie(header, charset='utf-8', errors='ignore',
                  cls=None):
     """Parse a cookie.  Either from a string or WSGI environ.
@@ -429,25 +423,22 @@ def dump_cookie(key, value='', max_age=None, expires=None, path='/',
         morsel['expires'] = expires
     elif max_age is not None and sync_expires:
         morsel['expires'] = cookie_date(time() + max_age)
+    if domain and ':' in domain:
+        # The port part of the domain should NOT be used. Strip it
+        domain = domain.split(':', 1)[0]
+    if domain:
+        assert '.' in domain, (
+            "Setting \"domain\" for a cookie on a server running localy (ex: "
+            "localhost) is not supportted by complying browsers. You should "
+            "have something like: \"127.0.0.1 localhost dev.localhost\" on "
+            "your hosts file and then point your server to run on "
+            "\"dev.localhost\" and also set \"domain\" for \"dev.localhost\""
+        )
     for k, v in (('path', path), ('domain', domain), ('secure', secure),
                  ('max-age', max_age), ('httponly', httponly)):
         if v is not None and v is not False:
             morsel[k] = str(v)
     return morsel.output(header='').lstrip()
-
-
-def http_date(timestamp=None):
-    """Formats the time to match the RFC1123 date format.
-
-    Accepts a floating point number expressed in seconds since the epoch in, a
-    datetime object or a timetuple.  All times in UTC.  The :func:`parse_date`
-    function can be used to parse such a date.
-
-    Outputs a string in the format ``Wdy, DD Mon YYYY HH:MM:SS GMT``.
-
-    :param timestamp: If provided that date is used, otherwise the current.
-    """
-    return _dump_date(timestamp, ' ')
 
 
 def redirect(location, code=302):
@@ -464,7 +455,7 @@ def redirect(location, code=302):
     :param location: the location the response should redirect to.
     :param code: the redirect status code.
     """
-    assert code in (301, 302, 303, 305, 307), 'invalid code'
+    assert code in (201, 301, 302, 303, 305, 307), 'invalid code'
     from werkzeug.wrappers import BaseResponse
     display_location = location
     if isinstance(location, unicode):
@@ -523,8 +514,15 @@ def import_string(import_name, silent=False):
         # if the module is a package
         if isinstance(obj, unicode):
             obj = obj.encode('utf-8')
-        return getattr(__import__(module, None, None, [obj]), obj)
-    except (ImportError, AttributeError):
+        try:
+            return getattr(__import__(module, None, None, [obj]), obj)
+        except (ImportError, AttributeError):
+            # support importing modules not yet set up by the parent module
+            # (or package for that matter)
+            modname = module + '.' + obj
+            __import__(modname)
+            return sys.modules[modname]
+    except ImportError:
         if not silent:
             raise
 
@@ -585,7 +583,7 @@ def validate_arguments(func, args, kwargs, drop_extra=True):
     This can be useful for decorators that forward user submitted data to
     a view function::
 
-        from werkzeug import ArgumentValidationError, validate_arguments
+        from werkzeug.utils import ArgumentValidationError, validate_arguments
 
         def sanitize(f):
             def proxy(request):
@@ -662,10 +660,9 @@ class ArgumentValidationError(ValueError):
 
 
 # circular dependencies
-from werkzeug.http import quote_header_value, unquote_header_value
-from werkzeug.exceptions import BadRequest
+from werkzeug.http import quote_header_value, unquote_header_value, \
+     cookie_date
 from werkzeug.datastructures import TypeConversionDict
-
 
 # DEPRECATED
 # these objects were previously in this module as well.  we import

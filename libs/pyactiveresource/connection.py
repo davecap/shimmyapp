@@ -11,6 +11,7 @@ import urlparse
 from pyactiveresource import formats
 
 from google.appengine.api import urlfetch
+import logging
 
 class Error(Exception):
     """A general error derived from Exception."""
@@ -147,18 +148,6 @@ class Response(object):
     def get(self, key, value=None):
         return self.headers.get(key, value)
 
-    # @classmethod
-    # def from_httpresponse(cls, response):
-    #     """Create a Response object based on an httplib.HTTPResponse object.
-    # 
-    #     Args:
-    #         response: An httplib.HTTPResponse object.
-    #     Returns:
-    #         A Response object.
-    #     """
-    #     return cls(response.code, response.read(),
-    #                dict(response.headers), response.msg, response)
-    
     @classmethod
     def from_httpresponse(cls, response):
         """Create a Response object based on the urlfetch Response object
@@ -293,8 +282,6 @@ class Connection(object):
             urllib2.HTTPError on server errors.
             urllib2.URLError on IO errors.
         """
-        #return urllib2.urlopen(request)
-        #fetch(url, payload=None, method=GET, headers={}, allow_truncated=False, follow_redirects=True, deadline=None, validate_certificate=None)
         return urlfetch.fetch(request.get_full_url(), request.get_data(), request.get_method(), request.headers, deadline=10)
 
     def get(self, path, headers=None):

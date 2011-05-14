@@ -5,13 +5,11 @@ This file is used for both the routing and logic of your
 application.
 """
 from google.appengine.api import taskqueue
-from google.appengine.ext import db
 
 from flask import url_for, render_template, request, redirect, flash, session, make_response
 from werkzeug.exceptions import BadRequest
 import logging
-import urllib
-import urlparse
+import os
 
 from application import app, shopify
 from flaskext.shopify import shopify_login_required
@@ -120,7 +118,8 @@ def uninstall():
 @app.after_request
 def add_header(response):
     """Add header to force latest IE rendering engine and Chrome Frame."""
-    response.headers['X-UA-Compatible'] = 'IE=Edge,chrome=1'
+    if request.method == 'GET':
+        response.headers['X-UA-Compatible'] = 'IE=Edge,chrome=1'
     return response
 
 ## Error handlers
@@ -191,7 +190,8 @@ def upload():
                         product_handle = request.form['product_handle'],
                         image = f.stream.read(),
                         mimetype = f.content_type,
-                        filename = f.filename
+                        filename = f.filename,
+                        extension = os.path.splitext(f.filename)[1]
                     )
         image.put()
         
@@ -203,23 +203,23 @@ def upload():
     else:
         return render_template('500.html'), 500
 
-
-#@app.route('/shop/<string:shop_domain>/images/<string:product_handle>_<int:key_id>.jpg')
-#def image(shop_domain, product_handle, key_id):
-@app.route('/i/<string:key>/<string:product_handle>.jpg')
-def image(key, product_handle):
-    product_handle = str(urllib.unquote(product_handle))
-    i = Image.get(db.Key(encoded=key))
-    #shop_domain = str(urllib.unquote(shop_domain))
-    #i = Image.get_by_id(key_id)
-    
+@app.route('/i/<int:key_id>/<string:filename>', methods=['GET', 'HEAD'])
+def image(key_id, filename):
+    i = Image.get_by_id(key_id)
     if i:
-        # show the blob
-        response = make_response(i.image)
+        if request.method == 'GET':
+            # show the blob
+            response = make_response(i.image)
+        else:
+            response = make_response()
         response.headers['Content-Type'] = i.mimetype
         return response
     else:
         render_template('404.html'), 404
+
+def url_for_image(i):
+    filename = i.product_handle + '-%d%s' % (i.key().id(), i.extension)
+    return 'http://' + app.config['SERVER_NAME'] + url_for('image', key_id=i.key().id(), filename=filename)
 
 def allowed_file(filename): 
     """Check to make sure the file is an image.""" 
@@ -251,15 +251,10 @@ def sync_worker():
         product.images.append({ "src": url }) # add the new image to the images attribute
         
         if not product.save():
-            logging.error('Error saving product (%d) images (%s) to Shopify!' % (product_id, url))
+            logging.error('Error saving product (%d) images (%s) to Shopify! \n%s' % (product_id, url, str(product.errors.full_messages())))
         else:
             logging.info('Product image (%s) saved to shopify!' % url)
             image.delete()
     #db.run_in_transaction(txn)
     txn()
     return ''
-
-def url_for_image(i):
-    return 'http://shimmyapp.appspot.com'+url_for('image', key=str(i.key()), product_handle=i.product_handle)
-    #return 'http://shimmyapp.appspot.com'+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())
-    #return 'http://'+app.config['SERVER_NAME']+url_for('image', shop_domain=i.shop_domain, product_handle=i.product_handle, key_id=i.key().id())

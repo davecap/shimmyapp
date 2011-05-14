@@ -11,26 +11,38 @@
 import urlparse
 
 from werkzeug._internal import _decode_unicode
+from werkzeug.datastructures import MultiDict, iter_multi_items
 
 
 #: list of characters that are always safe in URLs.
-_always_safe = frozenset('ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-                         'abcdefghijklmnopqrstuvwxyz'
-                         '0123456789_.-')
+_always_safe = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                'abcdefghijklmnopqrstuvwxyz'
+                '0123456789_.-')
+_safe_map = dict((c, c) for c in _always_safe)
+for i in xrange(0x80):
+    c = chr(i)
+    if c not in _safe_map:
+        _safe_map[c] = '%%%02X' % i
+_safe_map.update((chr(i), '%%%02X' % i) for i in xrange(0x80, 0x100))
+_safemaps = {}
 
 #: lookup table for encoded characters.
-_hextochr = dict(('%02x' % i, chr(i)) for i in xrange(256))
-_hextochr.update(('%02X' % i, chr(i)) for i in xrange(256))
+_hexdig = '0123456789ABCDEFabcdef'
+_hextochr = dict((a + b, chr(int(a + b, 16)))
+                 for a in _hexdig for b in _hexdig)
 
 
-def _quote(s, safe='/', _quotechar='%%%02X'.__mod__):
+def _quote(s, safe='/', _join=''.join):
     assert isinstance(s, str), 'quote only works on bytes'
-    safe = _always_safe | set(safe)
-    rv = list(s)
-    for idx, char in enumerate(s):
-        if char not in safe:
-            rv[idx] = _quotechar(ord(char))
-    return ''.join(rv)
+    if not s or not s.rstrip(_always_safe + safe):
+        return s
+    try:
+        quoter = _safemaps[safe]
+    except KeyError:
+        safe_map = _safe_map.copy()
+        safe_map.update([(c, c) for c in safe])
+        _safemaps[safe] = quoter = safe_map.__getitem__
+    return _join(map(quoter, s))
 
 
 def _quote_plus(s, safe=''):
@@ -39,9 +51,8 @@ def _quote_plus(s, safe=''):
     return _quote(s, safe)
 
 
-
 def _safe_urlsplit(s):
-    """the urllib.urlsplit cache breaks if it contains unicode and
+    """the urlparse.urlsplit cache breaks if it contains unicode and
     we cannot control that.  So we force type cast that thing back
     to what we think it is.
     """
@@ -58,18 +69,19 @@ def _safe_urlsplit(s):
 
 def _unquote(s, unsafe=''):
     assert isinstance(s, str), 'unquote only works on bytes'
-    unsafe = set(unsafe)
     rv = s.split('%')
-    for i in xrange(1, len(rv)):
-        item = rv[i]
+    if len(rv) == 1:
+        return s
+    s = rv[0]
+    for item in rv[1:]:
         try:
             char = _hextochr[item[:2]]
             if char in unsafe:
                 raise KeyError()
-            rv[i] = char + item[2:]
+            s += char + item[2:]
         except KeyError:
-            rv[i] = '%' + item
-    return ''.join(rv)
+            s += '%' + item
+    return s
 
 
 def _unquote_plus(s):
@@ -262,17 +274,16 @@ def url_encode(obj, charset='utf-8', encode_keys=False, sort=False, key=None,
     """
     iterable = iter_multi_items(obj)
     if sort:
-        iterable = list(iterable)
-        iterable.sort(key=key)
+        iterable = sorted(iterable, key=key)
     tmp = []
     for key, value in iterable:
+        if value is None:
+            continue
         if encode_keys and isinstance(key, unicode):
             key = key.encode(charset)
         else:
             key = str(key)
-        if value is None:
-            continue
-        elif isinstance(value, unicode):
+        if isinstance(value, unicode):
             value = value.encode(charset)
         else:
             value = str(value)
@@ -338,6 +349,8 @@ def url_unquote_plus(s, charset='utf-8', errors='ignore'):
     :param charset: the charset to be used.
     :param errors: the error handling for the charset decoding.
     """
+    if isinstance(s, unicode):
+        s = s.encode(charset)
     return _decode_unicode(_unquote_plus(s), charset, errors)
 
 
@@ -445,12 +458,8 @@ class Href(object):
         if path:
             if not rv.endswith('/'):
                 rv += '/'
-            rv = urlparse.urljoin(rv, path)
+            rv = urlparse.urljoin(rv, './' + path)
         if query:
             rv += '?' + url_encode(query, self.charset, sort=self.sort,
                                    key=self.key)
         return str(rv)
-
-
-# circular dependencies
-from werkzeug.datastructures import MultiDict, iter_multi_items

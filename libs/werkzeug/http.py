@@ -32,7 +32,7 @@ except ImportError: # pragma: no cover
 
 #: HTTP_STATUS_CODES is "exported" from this module.
 #: XXX: move to werkzeug.consts or something
-from werkzeug._internal import HTTP_STATUS_CODES
+from werkzeug._internal import HTTP_STATUS_CODES, _dump_date
 
 
 _accept_re = re.compile(r'([^\s;,]+)(?:[^,]*?;\s*q=(\d*(?:\.\d+)?))?')
@@ -74,7 +74,7 @@ def quote_header_value(value, extra_chars='', allow_token=True):
     return '"%s"' % value.replace('\\', '\\\\').replace('"', '\\"')
 
 
-def unquote_header_value(value, is_filename = False):
+def unquote_header_value(value, is_filename=False):
     r"""Unquotes a header value.  (Reversal of :func:`quote_header_value`).
     This does not use the real unquoting but what browsers are actually
     using for quoting.
@@ -89,7 +89,7 @@ def unquote_header_value(value, is_filename = False):
         # probably some other browsers as well.  IE for example is
         # uploading files with "C:\foo\bar.txt" as filename
         value = value[1:-1]
-        
+
         # if this is a filename and the starting characters look like
         # a UNC path, then just return the value without quotes.  Using the
         # replace sequence below on a UNC path has the effect of turning
@@ -216,7 +216,7 @@ def parse_options_header(value):
     type and the options:
 
     >>> parse_options_header('Content-Type: text/html; mimetype=text/html')
-    ('Content-Type: text/html', {'mimetype': 'text/html'})
+    ('Content-Type:', {'mimetype': 'text/html'})
 
     This should not be used to parse ``Cache-Control`` like headers that use
     a slightly different format.  For these headers use the
@@ -481,6 +481,35 @@ def parse_date(value):
                        timedelta(seconds=t[-1] or 0)
             except (ValueError, OverflowError):
                 return None
+
+
+def cookie_date(expires=None):
+    """Formats the time to ensure compatibility with Netscape's cookie
+    standard.
+
+    Accepts a floating point number expressed in seconds since the epoch in, a
+    datetime object or a timetuple.  All times in UTC.  The :func:`parse_date`
+    function can be used to parse such a date.
+
+    Outputs a string in the format ``Wdy, DD-Mon-YYYY HH:MM:SS GMT``.
+
+    :param expires: If provided that date is used, otherwise the current.
+    """
+    return _dump_date(expires, '-')
+
+
+def http_date(timestamp=None):
+    """Formats the time to match the RFC1123 date format.
+
+    Accepts a floating point number expressed in seconds since the epoch in, a
+    datetime object or a timetuple.  All times in UTC.  The :func:`parse_date`
+    function can be used to parse such a date.
+
+    Outputs a string in the format ``Wdy, DD Mon YYYY HH:MM:SS GMT``.
+
+    :param timestamp: If provided that date is used, otherwise the current.
+    """
+    return _dump_date(timestamp, ' ')
 
 
 def is_resource_modified(environ, etag=None, data=None, last_modified=None):

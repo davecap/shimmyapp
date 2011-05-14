@@ -23,6 +23,8 @@ class Image(db.Model):
     product_handle = db.StringProperty(required=True)
     filename = db.StringProperty(required=True)
     mimetype = db.StringProperty(required=True)
+    size = db.IntegerProperty(required=True)
+    extension = db.StringProperty(required=True)
     image = db.BlobProperty(default=None)
     created = db.DateTimeProperty(auto_now_add=True)
     updated = db.DateTimeProperty(auto_now=True)

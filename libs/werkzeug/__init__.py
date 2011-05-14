@@ -18,7 +18,7 @@ from types import ModuleType
 import sys
 
 # This import magic raises concerns quite often which is why the implementation
-# and motiviation is explained here in detail now.
+# and motivation is explained here in detail now.
 #
 # The majority of the functions and classes provided by Werkzeug work on the
 # HTTP and WSGI layer.  There is no useful grouping for those which is why
@@ -47,8 +47,8 @@ all_by_module = {
                              'url_unquote_plus', 'url_fix', 'Href',
                              'iri_to_uri', 'uri_to_iri'],
     'werkzeug.formparser':  ['parse_form_data'],
-    'werkzeug.utils':       ['escape', 'environ_property', 'cookie_date',
-                             'http_date', 'append_slash_redirect', 'redirect',
+    'werkzeug.utils':       ['escape', 'environ_property',
+                             'append_slash_redirect', 'redirect',
                              'cached_property', 'import_string',
                              'dump_cookie', 'parse_cookie', 'unescape',
                              'format_string', 'find_modules', 'header_property',
@@ -71,7 +71,8 @@ all_by_module = {
                              'FileMultiDict', 'CallbackDict', 'FileStorage',
                              'OrderedMultiDict', 'ImmutableOrderedMultiDict'],
     'werkzeug.useragents':  ['UserAgent'],
-    'werkzeug.http':        ['parse_etags', 'parse_date', 'parse_cache_control_header',
+    'werkzeug.http':        ['parse_etags', 'parse_date', 'http_date',
+                             'cookie_date', 'parse_cache_control_header',
                              'is_resource_modified', 'parse_accept_header',
                              'parse_set_header', 'quote_etag', 'unquote_etag',
                              'generate_etag', 'dump_header',
@@ -96,7 +97,7 @@ all_by_module = {
 }
 
 # modules that should be imported when accessed as attributes of werkzeug
-attribute_modules = dict.fromkeys(['exceptions', 'routing', 'script'])
+attribute_modules = frozenset(['exceptions', 'routing', 'script'])
 
 
 object_origins = {}
@@ -138,7 +139,7 @@ class module(ModuleType):
             try:
                 version = __import__('pkg_resources') \
                           .get_distribution('Werkzeug').version
-            except:
+            except Exception:
                 version = 'unknown'
         return version
 
@@ -150,6 +151,7 @@ old_module = sys.modules['werkzeug']
 new_module = sys.modules['werkzeug'] = module('werkzeug')
 new_module.__dict__.update({
     '__file__':         __file__,
+    '__package__':      'werkzeug',
     '__path__':         __path__,
     '__doc__':          __doc__,
     '__all__':          tuple(object_origins) + tuple(attribute_modules),

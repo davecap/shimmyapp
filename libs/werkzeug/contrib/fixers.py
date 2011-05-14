@@ -17,6 +17,7 @@
     :license: BSD, see LICENSE for more details.
 """
 from urllib import unquote
+from werkzeug.wrappers import BaseRequest
 from werkzeug.http import parse_options_header, parse_cache_control_header, \
      parse_set_header, dump_header
 from werkzeug.useragents import UserAgent
@@ -34,8 +35,15 @@ class LighttpdCGIRootFix(object):
         self.app = app
 
     def __call__(self, environ, start_response):
-        environ['PATH_INFO'] = environ.get('SCRIPT_NAME', '') + \
-                               environ.get('PATH_INFO', '')
+        # only set PATH_INFO for older versions of Lighty or if no
+        # server software is provided.  That's because the test was
+        # added in newer Werkzeug versions and we don't want to break
+        # people's code if they are using this fixer in a test that
+        # does not set the SERVER_SOFTWARE key.
+        if 'SERVER_SOFTWARE' not in environ or \
+           environ['SERVER_SOFTWARE'] < 'lighttpd/1.4.28':
+            environ['PATH_INFO'] = environ.get('SCRIPT_NAME', '') + \
+                                   environ.get('PATH_INFO', '')
         environ['SCRIPT_NAME'] = ''
         return self.app(environ, start_response)
 
@@ -77,7 +85,7 @@ class ProxyFix(object):
     sets `REMOTE_ADDR`, `HTTP_HOST` from `X-Forwarded` headers.
 
     Werkzeug wrappers have builtin support for this by setting the
-    :attr:`~werkzeug.BaseRequest.is_behind_proxy` attribute to `True`.
+    :attr:`~BaseRequest.is_behind_proxy` attribute to `True`.
 
     Do not use this middleware in non-proxy setups for security reasons.
 

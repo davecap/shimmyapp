@@ -11,7 +11,7 @@
 import inspect
 from weakref import WeakKeyDictionary
 from cStringIO import StringIO
-from Cookie import BaseCookie, Morsel, CookieError
+from Cookie import SimpleCookie, Morsel, CookieError
 from time import gmtime
 from datetime import datetime, date
 
@@ -188,7 +188,7 @@ def _patch_wrapper(old, new):
         new.__module__ = old.__module__
         new.__doc__ = old.__doc__
         new.__dict__ = old.__dict__
-    except:
+    except Exception:
         pass
     return new
 
@@ -280,7 +280,7 @@ class _ExtendedMorsel(Morsel):
         return result
 
 
-class _ExtendedCookie(BaseCookie):
+class _ExtendedCookie(SimpleCookie):
     """Form of the base cookie that doesn't raise a `CookieError` for
     malformed keys.  This has the advantage that broken cookies submitted
     by nonstandard browsers don't cause the cookie to be empty.

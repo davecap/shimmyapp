@@ -9,7 +9,6 @@
     :license: BSD, see LICENSE for more details.
 """
 import sys
-import urllib
 import urlparse
 import mimetypes
 from time import time
@@ -22,8 +21,8 @@ from urllib2 import Request as U2Request
 
 from werkzeug._internal import _empty_stream, _get_environ
 from werkzeug.wrappers import BaseRequest
-from werkzeug.urls import url_encode, url_fix, iri_to_uri
-from werkzeug.wsgi import get_host, get_current_url
+from werkzeug.urls import url_encode, url_fix, iri_to_uri, _unquote
+from werkzeug.wsgi import get_host, get_current_url, ClosingIterator
 from werkzeug.datastructures import FileMultiDict, MultiDict, \
      CombinedMultiDict, Headers, FileStorage
 
@@ -153,7 +152,7 @@ class _TestCookieJar(CookieJar):
         for cookie in self:
             cvals.append('%s=%s' % (cookie.name, cookie.value))
         if cvals:
-            environ['HTTP_COOKIE'] = ', '.join(cvals)
+            environ['HTTP_COOKIE'] = '; '.join(cvals)
 
     def extract_wsgi(self, environ, headers):
         """Extract the server's set-cookie headers as cookies into the
@@ -322,7 +321,6 @@ class EnvironBuilder(object):
             warn(DeprecationWarning('it\'s no longer possible to pass dicts '
                                     'as `data`.  Use tuples or FileStorage '
                                     'objects instead'), stacklevel=2)
-            args = v
             value = dict(value)
             mimetype = value.pop('mimetype', None)
             if mimetype is not None:
@@ -526,7 +524,7 @@ class EnvironBuilder(object):
         def _path_encode(x):
             if isinstance(x, unicode):
                 x = x.encode(self.charset)
-            return urllib.unquote(x)
+            return _unquote(x)
 
         result.update({
             'REQUEST_METHOD':       self.method,
@@ -589,12 +587,17 @@ class Client(object):
     sent for subsequent requests. This is True by default, but passing False
     will disable this behaviour.
 
+    If you want to request some subdomain of your application you may set
+    `allow_subdomain_redirects` to `True` as if not no external redirects
+    are allowed.
+
     .. versionadded:: 0.5
        `use_cookies` is new in this version.  Older versions did not provide
        builtin cookie support.
     """
 
-    def __init__(self, application, response_wrapper=None, use_cookies=True):
+    def __init__(self, application, response_wrapper=None, use_cookies=True,
+                 allow_subdomain_redirects=False):
         self.application = application
         if response_wrapper is None:
             response_wrapper = lambda a, s, h: (a, s, h)
@@ -604,6 +607,7 @@ class Client(object):
         else:
             self.cookie_jar = None
         self.redirect_client = None
+        self.allow_subdomain_redirects = allow_subdomain_redirects
 
     def open(self, *args, **kwargs):
         """Takes the same arguments as the :class:`EnvironBuilder` class with
@@ -664,10 +668,19 @@ class Client(object):
                 self.redirect_client.cookie_jar = self.cookie_jar
 
             redirect = dict(rv[2])['Location']
+
             scheme, netloc, script_root, qs, anchor = urlparse.urlsplit(redirect)
             base_url = urlparse.urlunsplit((scheme, netloc, '', '', '')).rstrip('/') + '/'
-            host = get_host(create_environ('/', base_url, query_string=qs)).split(':', 1)[0]
-            if get_host(environ).split(':', 1)[0] != host:
+
+            cur_server_name = netloc.split(':', 1)[0].split('.')
+            real_server_name = get_host(environ).split(':', 1)[0].split('.')
+
+            if self.allow_subdomain_redirects:
+                allowed = cur_server_name[-len(real_server_name):] == real_server_name
+            else:
+                allowed = cur_server_name == real_server_name
+
+            if not allowed:
                 raise RuntimeError('%r does not support redirect to '
                                    'external targets' % self.__class__)
 
@@ -675,20 +688,20 @@ class Client(object):
 
             # the redirect request should be a new request, and not be based on
             # the old request
-            redirect_kwargs = {}
-            redirect_kwargs.update({
+
+            redirect_kwargs = {
                 'path':             script_root,
                 'base_url':         base_url,
                 'query_string':     qs,
                 'as_tuple':         True,
                 'buffered':         buffered,
                 'follow_redirects': False,
-            })
+            }
             environ, rv = self.redirect_client.open(**redirect_kwargs)
             status_code = int(rv[1].split(None, 1)[0])
 
             # Prevent loops
-            if redirect_chain[-1] in redirect_chain[0:-1]:
+            if redirect_chain[-1] in redirect_chain[:-1]:
                 raise ClientRedirectError("loop detected")
 
         response = self.response_wrapper(*rv)
@@ -803,6 +816,3 @@ def run_wsgi_app(app, environ, buffered=False):
                 app_iter = ClosingIterator(app_iter, close_func)
 
     return app_iter, response[0], response[1]
-
-
-from werkzeug.wsgi import ClosingIterator
