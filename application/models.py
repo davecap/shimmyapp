@@ -21,11 +21,10 @@ class Image(db.Model):
     # shop = db.ReferenceProperty(Shop, collection_name='images', required=False)
     product_id = db.IntegerProperty(required=True)
     product_handle = db.StringProperty(required=True)
+    image = db.BlobProperty(default=None)
     filename = db.StringProperty(required=True)
     mimetype = db.StringProperty(required=True)
-    size = db.IntegerProperty(required=True)
     extension = db.StringProperty(required=True)
-    image = db.BlobProperty(default=None)
     created = db.DateTimeProperty(auto_now_add=True)
     updated = db.DateTimeProperty(auto_now=True)
     

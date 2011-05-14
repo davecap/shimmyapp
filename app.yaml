@@ -82,5 +82,8 @@ handlers:
   static_files: static/\1
   upload: static/(.*\.html)
 
+- url: /i/.*
+  script: image.py
+
 - url: /.*
   script: main.py

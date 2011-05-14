@@ -203,19 +203,10 @@ def upload():
     else:
         return render_template('500.html'), 500
 
-@app.route('/i/<int:key_id>/<string:filename>', methods=['GET', 'HEAD'])
+@app.route('/i/<int:key_id>/<string:filename>')
 def image(key_id, filename):
-    i = Image.get_by_id(key_id)
-    if i:
-        if request.method == 'GET':
-            # show the blob
-            response = make_response(i.image)
-        else:
-            response = make_response()
-        response.headers['Content-Type'] = i.mimetype
-        return response
-    else:
-        render_template('404.html'), 404
+    # IMPLEMENTED IN WEBAPP TO OVERRIDE HEAD REQUESTS
+    pass
 
 def url_for_image(i):
     filename = i.product_handle + '-%d%s' % (i.key().id(), i.extension)
