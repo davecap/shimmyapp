@@ -246,10 +246,11 @@ def sync_worker():
         product.images.append({ "src": url }) # add the new image to the images attribute
         
         if not product.save():
-            channel.send_message(shopify_session.url, simplejson.dumps({ 'message': 'Error saving product to shopify!', 'product_id': product_id }))
+            channel.send_message(shopify_session.url, simplejson.dumps({ 'error': True, 'message': 'Error saving product to shopify!', 'product_id': product_id }))
             logging.error('Error saving product (%d) images (%s) to Shopify! \n%s' % (product_id, url, str(product.errors.full_messages())))
         else:
-            channel.send_message(shopify_session.url, simplejson.dumps({ 'message': 'Product saved to shopify!', 'product_id': product_id }))
+            image_urls = [ i.src for i in product.images ]
+            channel.send_message(shopify_session.url, simplejson.dumps({ 'error': False, 'message': 'Product saved to shopify!', 'product_id': product_id, 'image_urls': image_urls }))
             logging.info('Product image (%s) saved to shopify!' % url)
             image.delete()
     #db.run_in_transaction(txn)

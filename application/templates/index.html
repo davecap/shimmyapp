@@ -11,6 +11,16 @@
 
 <script type='text/javascript'>    
     $(function () {
+
+        // $('.product').hover(
+        //     function (){
+        //         $(this).find('.upload_buttons').show();
+        //     },
+        //     function () {
+        //         $(this).find('.upload_buttons').hide();
+        //     }                
+        // );
+        
         $list = $('#product-list');
         vendor_filter = false;
         type_filter = false;
@@ -52,15 +62,17 @@
         
         // Initialize jQuery File Upload (Extended User Interface Version):
         $('.file_upload').fileUploadUI({
-            // uploadTable: $('#file-queue'),
-            // buildUploadRow: function (files, index, handler) {
-            //     return $('<tr><td>' + files[index].name + '<\/td>' +
-            //             '<td class="file_upload_progress"><div><\/div><\/td>' +
-            //             '<td class="file_upload_cancel">' +
-            //             '<button class="ui-state-default ui-corner-all" title="Cancel">' +
-            //             '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
-            //             '<\/button><\/td><\/tr>');
-            // },
+            uploadTable: $('#file-queue'),
+            buildUploadRow: function (files, index, handler) {
+                return $('<tr><td>' + files[index].name + '<\/td>' +
+                        '<td class="file_upload_progress"><div><\/div><\/td>' +
+                        '<td class="file_upload_cancel">' +
+                        '<button class="ui-state-default ui-corner-all" title="Cancel">' +
+                        '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
+                        '<\/button><\/td><\/tr>');
+            },
+            onSend: function() { $("#panel").toggle("slow"); },
+            onLoadAll: function() { $("#panel").toggle("slow"); },
             // buildDownloadRow: function (file, handler) {
             //     return $('<tr><td>' + file.name + '<\/td><\/tr>');
             // },
@@ -69,38 +81,58 @@
 
 </script>
 
+{% endblock %}
 
+{% block css %}
+<style>
+#panel {
+    position: fixed;
+    top: 50%;
+    left: 25%;
+    display:none;
+    height:auto;
+    width: 330px;    
+    padding: 30px 30px 30px 130px;
+    background: black;
+    color: white;
+    -moz-border-radius: 20px;
+    -webkit-border-radius: 20px;
+    opacity: .85;
+    filter: alpha(opacity=85);
+    z-index: 999; 
+}
+
+.file_upload_highlight {
+    border: solid 2px red;
+}
+
+</style>
 {% endblock %}
 
 {% block content %}
+<div id="panel">
+    <table id="file-queue"></table>
+</div>
 
 <script type='text/javascript'>
 
     
     // App Engine Channel API
     
-    // onOpened = function() {
-    //     connected = true;
-    //     sendMessage('opened');
-    //     alert('open');
-    // };
-    
     onMessage = function(m) {
-        alert(m.message);
+        m = JSON.parse(m.data);
+        if (!m.error) {
+            // Saved to shopify, update the div
+            sel = $('#product-'+m.product_id+' .images')
+            sel.empty();
+            $.each(m.image_urls, function(i, val) {
+                sel.append('<img src="'+val+'" width=50 />');
+            });
+        }
     };
     
-    // sendMessage = function(path, opt_param) {
-    //     path += '?g=' + state.game_key;
-    //     if (opt_param) {
-    //         path += '&' + opt_param;
-    //     }
-    //     var xhr = new XMLHttpRequest();
-    //     xhr.open('POST', path, true);
-    //     xhr.send();
-    // };
-
     openChannel = function() {
-      var token = '{{ request.channel_token }}';
+      var token = '{{ channel_token }}';
       var channel = new goog.appengine.Channel(token);
       var handler = {
         'onmessage': onMessage,
@@ -147,7 +179,7 @@
 
     <div id="product-list" class="fitRows clearfix">
       {% for product in products %}
-        <div class="product box vendor-{{ product.vendor_slug }} product-type-{{ product.product_type_slug }}" style="width:90%;">
+        <div id="product-{{ product.id }}" class="product box vendor-{{ product.vendor_slug }} product-type-{{ product.product_type_slug }}" style="width:90%;">
             <form class="file_upload" action="/upload" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="protocol" value="http">
                 <input type="hidden" name="product_id" value="{{ product.id }}" />
@@ -164,13 +196,13 @@
                         {% endfor %}
                     </div>
                 </div>
-                <div style="clear:left"></div>
-                <div class="upload_buttons" style="display:none;">
-                    <button type="submit">Upload</button>
+                <div class="upload_buttons clearfix" style="display:none;">
                     <input type="file" name="file" multiple>
+                    <button type="submit">Upload</button>
                 </div>
             </form>
         </div>
+        <div style="clear:all;"></div>
       {% endfor %}
      </div>
 
