@@ -32,10 +32,10 @@ def get_or_create_shop(shopify_session):
 def warmup():
     return ''
 
-@app.before_request
-def before_request():
-    """ Get the shop data before each request, if possible """
-    ctx = _request_ctx_stack.top
+#@app.before_request
+#def before_request():
+#    """ Get the shop data before each request, if possible """
+#    ctx = _request_ctx_stack.top
 
 @app.after_request
 def add_header(response):
@@ -240,18 +240,17 @@ def sync_worker():
             token = (dbshop.domain, dbshop.password)
             shopify_session = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
         
-        product = shopify_session.Product.find(product_id) # get the Product fresh from Shopify
         image = models.Image.get(image_key) # get the Image object from the DB
         url = url_for_image(image) # get the URL for the Image data (image view)
-        product.images.append({ "src": url }) # add the new image to the images attribute
         
+        product = shopify_session.Product.find(product_id) # get the Product fresh from Shopify
+        product.images.append({ "src": url }) # add the new image to the images attribute
         if not product.save():
             logging.error('Error saving product (%d) images (%s) to Shopify! \n%s' % (product_id, url, str(product.errors.full_messages())))
         else:
             channel.send_message(shopify_session.url, simplejson.dumps({ 'product_id': product_id, 'image_urls': [ i.src for i in product.images ] }))
             logging.info('Product image (%s) saved to shopify!' % url)
-            image.delete()
+            #image.delete()
     #db.run_in_transaction(txn)
-    
     txn()
     return ''
