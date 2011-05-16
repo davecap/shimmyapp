@@ -71,15 +71,14 @@
                         '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
                         '<\/button><\/td><\/tr>');
             },
-            onSend: function(e) {
-                $("#panel").toggle("slow");
-                d = $(e.target);
-                $(d).find('.images').html('<img style="margin-top:20px;margin-left:50px;" src="/images/loadingbar.gif" />');
+            onSend: function(event, files, index, xhr, handler) {
+                if (index == 0) {
+                    $("#panel").toggle("slow");
+                    d = $(e.target);
+                    $(d).find('.images').html('<img style="margin-top:20px;margin-left:50px;" src="/images/loadingbar.gif" />');
+                }
             },
             onLoadAll: function() { $("#panel").toggle("slow"); },
-            // buildDownloadRow: function (file, handler) {
-            //     return $('<tr><td>' + file.name + '<\/td><\/tr>');
-            // },
         });
     });
 

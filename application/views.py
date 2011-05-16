@@ -4,11 +4,11 @@ Flask Module Docs:  http://flask.pocoo.org/docs/api/#flask.Module
 This file is used for both the routing and logic of your
 application.
 """
-from google.appengine.api import taskqueue, channel
+from google.appengine.api import taskqueue, channel, urlfetch
 from django.utils import simplejson
 from django.template.defaultfilters import slugify
 
-from flask import url_for, render_template, request, redirect, flash, session, make_response, _request_ctx_stack
+from flask import url_for, render_template, request, redirect, flash, session, make_response
 from werkzeug.exceptions import BadRequest
 import logging
 import os
@@ -16,6 +16,8 @@ import os
 from flaskext.shopify import shopify_login_required
 
 from application import app, shopify, models
+import shopify_api
+import time
 
 def get_or_create_shop(shopify_session):        
     shop = models.Shop.all().filter("domain =", shopify_session.url)
@@ -212,8 +214,8 @@ def image(key_id, filename):
     else:
         render_template('404.html'), 404
 
-def url_for_image(i):
-    filename = i.product_handle + '-%d%s' % (i.key().id(), i.extension)
+def url_for_image(i, salt=''):
+    filename = i.product_handle + '-%s%d%s' % (salt, i.key().id(), i.extension)
     return 'http://' + app.config['SERVER_NAME'] + url_for('image', key_id=i.key().id(), filename=filename)
 
 def allowed_file(filename): 
@@ -225,7 +227,6 @@ def allowed_file(filename):
 
 @app.route('/tasks/sync', methods=['POST'])
 def sync_worker():
-    import shopify_api
     def txn():
         # expects: shop_domain, product_id, image_key
         # TODO: replace with shop object key
@@ -241,16 +242,25 @@ def sync_worker():
             shopify_session = shopify_api.Session(app.config['SHOPIFY_API_KEY'], *token)
         
         image = models.Image.get(image_key) # get the Image object from the DB
-        url = url_for_image(image) # get the URL for the Image data (image view)
+        url = url_for_image(image, salt=str(int(time.time()))) # get the URL for the Image data (image view)
         
         product = shopify_session.Product.find(product_id) # get the Product fresh from Shopify
         product.images.append({ "src": url }) # add the new image to the images attribute
-        if not product.save():
-            logging.error('Error saving product (%d) images (%s) to Shopify! \n%s' % (product_id, url, str(product.errors.full_messages())))
+        
+        error = False
+        try:
+            if not product.save():
+                raise Exception(str(product.errors.full_messages()))
+        except Exception, e:
+            # will catch DownloadError as well as save Exception above.
+            logging.error('Error when sending product image (%s) to Shopify! \n%s' % (url, str(e)))
+            product.reload()
+            error = True
         else:
-            channel.send_message(shopify_session.url, simplejson.dumps({ 'product_id': product_id, 'image_urls': [ i.src for i in product.images ] }))
             logging.info('Product image (%s) saved to shopify!' % url)
-            #image.delete()
+            image.delete()
+        
+        channel.send_message(shopify_session.url, simplejson.dumps({ 'error': error, 'product_id': product_id, 'image_urls': [ i.src for i in product.images ] }))
     #db.run_in_transaction(txn)
     txn()
     return ''
