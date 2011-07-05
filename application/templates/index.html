@@ -71,7 +71,7 @@
                         '<span class="ui-icon ui-icon-cancel">Cancel<\/span>' +
                         '<\/button><\/td><\/tr>');
             },
-            onSend: function(event, files, index, xhr, handler) {
+            onSend: function(e, files, index, xhr, handler) {
                 if (index == 0) {
                     $("#panel").toggle("slow");
                     d = $(e.target);

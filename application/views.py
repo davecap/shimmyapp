@@ -67,8 +67,8 @@ def index():
             p['product_type_slug'] = slugify(p['product_type'])
             vendors.append(p['vendor'])
             product_types.append(p['product_type'])
-        vendors = [ { 'slug': slugify(v), 'name': v } for v in set(vendors) ]
-        product_types = [ { 'slug': slugify(t), 'name': t } for t in set(product_types) ]
+        vendors = [ { 'slug': slugify(v), 'name': v } for v in sorted(set(vendors)) ]
+        product_types = [ { 'slug': slugify(t), 'name': t } for t in sorted(set(product_types)) ]
         
         template_values = { 'shop': shop,
                             'vendors': vendors,
